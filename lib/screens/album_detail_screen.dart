@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -423,7 +424,7 @@ class _WatchButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return FilledButton.icon(
+    return M3EButton(
       onPressed: onWatch,
       icon: const Icon(Icons.menu_book, size: 22),
       label: Row(
@@ -452,10 +453,6 @@ class _WatchButton extends StatelessWidget {
             ),
           ],
         ],
-      ),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }

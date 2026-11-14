@@ -63,14 +63,14 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, 'tester');
     await tester.enterText(find.byType(TextField).last, 'p@ss');
-    await tester.tap(find.widgetWithText(FilledButton, '登录'));
+    await tester.tap(find.widgetWithText(M3EButton, '登录'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(app.loggedIn, isTrue);
     expect(find.text('tester'), findsOneWidget);
     expect(find.textContaining('UID 42'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, '退出登录'), findsOneWidget);
+    expect(find.widgetWithText(M3EButton, '退出登录'), findsOneWidget);
 
     // 页签文案跟着变成「我的」
     expect(_labels(tester), <String?>['发现', '书库', '我的', '设置']);

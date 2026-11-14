@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 网络封面图：加载完成时淡入 + 轻微缩放，占位使用主题色块。
@@ -130,7 +131,8 @@ class ErrorView extends StatelessWidget {
             ),
             if (onRetry != null) ...<Widget>[
               const SizedBox(height: 20),
-              FilledButton.tonalIcon(
+              // M3E 按钮：按压自带形状压缩 + 触觉。
+              M3EButton(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
                 label: const Text('重试'),

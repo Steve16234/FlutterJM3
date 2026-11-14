@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -104,10 +105,9 @@ class _StartScreenState extends State<StartScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: FilledButton.tonalIcon(
-                onPressed: app.probing || _enteringHost != null
-                    ? null
-                    : app.refreshLines,
+              child: M3EButton(
+                onPressed: app.refreshLines,
+                enabled: !(app.probing || _enteringHost != null),
                 icon: app.probing
                     ? const SizedBox(
                         width: 18,
@@ -116,9 +116,6 @@ class _StartScreenState extends State<StartScreen> {
                       )
                     : const Icon(Icons.speed),
                 label: Text(app.probing ? '测速中…' : '重新测速'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
               ),
             ),
           ],

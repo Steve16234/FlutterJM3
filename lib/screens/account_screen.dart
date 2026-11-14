@@ -194,10 +194,10 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
         ],
         const SizedBox(height: 24),
-        FilledButton(
-          onPressed: _busy ? null : _submit,
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          child: _busy
+        M3EButton(
+          onPressed: _submit,
+          enabled: !_busy,
+          label: _busy
               ? const SizedBox(
                   width: 20,
                   height: 20,
@@ -297,11 +297,10 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
         const Divider(),
         const SizedBox(height: 12),
-        FilledButton.tonalIcon(
+        M3EButton(
           onPressed: () => _logout(app),
           icon: const Icon(Icons.logout),
           label: const Text('退出登录'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
         ),
         const SizedBox(height: 16),
         Text(
