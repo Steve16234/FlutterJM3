@@ -38,11 +38,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('清理缓存'),
         content: const Text('将删除已缓存的页图和章节列表，清理后再进入需要重新下载。'),
         actions: <Widget>[
-          TextButton(
+          M3EButton(
+            style: M3EButtonStyle.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+            label: const Text('取消'),
           ),
-          FilledButton(
+          M3EButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('清理'),
           ),
@@ -85,22 +86,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SectionHeader(title: '外观'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SegmentedButton<ThemeMode>(
-              segments: const <ButtonSegment<ThemeMode>>[
-                ButtonSegment<ThemeMode>(
+            child: M3ESegmentedButton<ThemeMode>(
+              segments: const <M3ESegment<ThemeMode>>[
+                M3ESegment<ThemeMode>(
                   value: ThemeMode.system,
                   icon: Icon(Icons.brightness_auto),
-                  label: Text('跟随系统'),
+                  label: '跟随系统',
                 ),
-                ButtonSegment<ThemeMode>(
+                M3ESegment<ThemeMode>(
                   value: ThemeMode.light,
                   icon: Icon(Icons.light_mode),
-                  label: Text('浅色'),
+                  label: '浅色',
                 ),
-                ButtonSegment<ThemeMode>(
+                M3ESegment<ThemeMode>(
                   value: ThemeMode.dark,
                   icon: Icon(Icons.dark_mode),
-                  label: Text('深色'),
+                  label: '深色',
                 ),
               ],
               selected: <ThemeMode>{app.themeMode},
@@ -152,9 +153,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : TextButton(
+                : M3EButton(
+                    style: M3EButtonStyle.text,
                     onPressed: _clearCache,
-                    child: const Text('清理'),
+                    label: const Text('清理'),
                   ),
           ),
           Padding(
