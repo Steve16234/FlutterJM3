@@ -105,7 +105,12 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
         _searched = true;
         _error = null;
       });
-      context.read<AppState>().addSearchHistory(trimmed);
+      // `_search` 也会从 `didUpdateWidget` 调到（build 阶段），此时
+      // `notifyListeners` 会报 markNeedsBuild during build，所以延后一帧。
+      final app = context.read<AppState>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        app.addSearchHistory(trimmed);
+      });
     }
 
     setState(() => _loading = true);
@@ -131,17 +136,22 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
     }
   }
 
-  void _pick(String keyword) {
-    widget.onKeywordSelected?.call(keyword);
-
+  void _pick(String keyword, {GlobalKey? originKey}) {
     // 历史 / 热词里的作品号（`1488098` / `JM1488098`）也要直达作品页，
     // 不能当成关键词去搜。
     final albumId = albumIdFromQuery(keyword);
     if (albumId != null) {
-      openAlbumPreviewFromCenter(context, albumId: albumId);
+      // 这里不能先回调 `onKeywordSelected`：它会把搜索框填上 JM 号，
+      // 用户从作品页返回时看到的是一个被改过的搜索框，却并没有搜索过。
+      openAlbumPreviewFromCenter(
+        context,
+        albumId: albumId,
+        originKey: originKey,
+      );
       return;
     }
 
+    widget.onKeywordSelected?.call(keyword);
     _search(keyword);
   }
 
@@ -168,13 +178,16 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: history
-                  .map((k) => M3EChip(
-                        label: k,
-                        type: M3EChipType.suggestion,
-                        onPressed: () => _pick(k),
-                      ))
-                  .toList(),
+              children: history.map((k) {
+                // 每行一个 key，转场从「点的这个 chip」长出来。
+                final key = GlobalKey();
+                return M3EChip(
+                  key: key,
+                  label: k,
+                  type: M3EChipType.suggestion,
+                  onPressed: () => _pick(k, originKey: key),
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -188,10 +201,12 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
               children: _hotTags.map((raw) {
                 final name = _tagName(raw);
                 if (name.isEmpty) return const SizedBox.shrink();
+                final key = GlobalKey();
                 return M3EChip(
+                  key: key,
                   label: name,
                   type: M3EChipType.suggestion,
-                  onPressed: () => _pick(name),
+                  onPressed: () => _pick(name, originKey: key),
                 );
               }).toList(),
             ),

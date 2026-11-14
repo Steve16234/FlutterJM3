@@ -41,8 +41,10 @@ void main() {
     expect(find.text('JM1488098'), findsOneWidget);
 
     await tester.tap(find.text('JM1488098'));
+    // 先跑完“文字飞入 → 搜索框铺满”的 morph，再等转场完成
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
 
     expect(find.byType(AlbumDetailScreen), findsOneWidget);
 
@@ -68,6 +70,7 @@ void main() {
 
     await tester.tap(find.text('催眠'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
     await tester.pump(const Duration(milliseconds: 400));
 
     // 不应跳作品页，而是留在搜索面板里

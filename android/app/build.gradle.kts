@@ -1,8 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// 读取 android/key.properties（已被 .gitignore 忽略）。文件不存在时返回 null，
+// release 构建自动回退到 debug 签名，保证 `flutter run --release` 仍然可用。
+val keystoreProperties: Properties? =
+    rootProject.file("key.properties")
+        .takeIf { it.exists() }
+        ?.let { file ->
+            Properties().apply { file.inputStream().use { load(it) } }
+        }
 
 android {
     namespace = "com.steve1623.flutterjm"
@@ -12,6 +23,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    if (keystoreProperties != null) {
+        signingConfigs {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
     }
 
     defaultConfig {
@@ -31,9 +53,24 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 有 key.properties 就用正式签名，否则沿用 debug 签名。
+            signingConfig =
+                if (keystoreProperties != null) {
+                    signingConfigs.getByName("release")
+                } else {
+                    // TODO: Add your own signing config for the release build.
+                    // Signing with the debug keys for now, so `flutter run --release` works.
+                    signingConfigs.getByName("debug")
+                }
+
+            // R8 代码压缩 + 资源压缩。Dart 代码在 libapp.so 里，不受影响；
+            // 收益来自 Kotlin/Java 侧（Flutter embedding、插件）的裁剪与混淆。
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

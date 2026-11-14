@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../data/account_models.dart';
@@ -306,11 +307,13 @@ class GatewayClient {
         if (res.statusCode != 200) {
           throw GatewayException('HTTP ${res.statusCode}');
         }
-        return _decodeBody(
-          utf8.decode(res.bodyBytes, allowMalformed: true),
-          ts,
-          path,
-        );
+        final body = utf8.decode(res.bodyBytes, allowMalformed: true);
+        final decoded = _decodeBody(body, ts, path);
+        // 发评论的返回值直接关系到「成功」判定，打一行原始报文方便对账。
+        if (path == 'comment') {
+          debugPrint('[comment] raw=$body decoded=$decoded');
+        }
+        return decoded;
       } catch (e) {
         lastError = e;
         if (e is GatewayException && e.message.startsWith('HTTP 4')) rethrow;
@@ -433,13 +436,21 @@ class GatewayClient {
     }
   }
 
-  /// 发起 POST（`multipart/form-data`，不是 JSON），失败自动重试 3 次。
-  Future<dynamic> post(String path, Map<String, String> fields) async {
+  /// 发起 POST（`multipart/form-data`，不是 JSON）。
+  ///
+  /// [retry] 默认 1（只发一次）。需要重试的幂等接口可以传 3，
+  /// 但**带副作用的写接口（发表评论、点赞…）必须保持 1**：
+  /// 服务端有「勿短时间重复留言」限流，自动重发会把一次成功变成一次重复。
+  Future<dynamic> post(
+    String path,
+    Map<String, String> fields, {
+    int retry = 1,
+  }) async {
     await ensureReady();
 
     final uri = Uri.parse('$_baseUrl$path');
     Object? lastError;
-    for (var attempt = 0; attempt < 3; attempt++) {
+    for (var attempt = 0; attempt < retry; attempt++) {
       try {
         final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
         final request = http.MultipartRequest('POST', uri)
@@ -609,6 +620,34 @@ class GatewayClient {
       'page': '$page',
     });
     return data is Map ? data.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  /// 发表评论并返回 [CommentSendResult]。
+  ///
+  /// 请求体按官方实现发 `multipart/form-data`：
+  /// * `comment` —— 正文，纯文本（上限 200 字，界面上先行限制）；
+  /// * `aid` —— 漫画号；
+  /// * `comment_id` —— 仅在回复某条评论时带上；
+  /// * `spoiler` —— `'2'` 表示剧透、`'1'` 表示普通，与列表返回的 `spoiler` 字段同义。
+  ///
+  /// 历史坑：官方 App 的「有劇透」复选框只是本地 state，从没被提交过，
+  /// 所以这里只能按 web 端同义字段补上；默认仍然发送 `'1'`，
+  /// 保证行为与官方一致。
+  Future<CommentSendResult> sendComment({
+    required String aid,
+    required String content,
+    String? parentCommentId,
+    bool spoiler = false,
+  }) async {
+    // 注意：这里不重试。发评论是非幂等的，重发会撞上「勿短时间重复留言」。
+    final data = await post('comment', <String, String>{
+      'comment': content,
+      'aid': aid,
+      if (parentCommentId != null && parentCommentId.isNotEmpty)
+        'comment_id': parentCommentId,
+      'spoiler': spoiler ? '2' : '1',
+    });
+    return CommentSendResult.fromJson(data);
   }
 
   /// 影片列表。

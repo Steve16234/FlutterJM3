@@ -55,4 +55,5 @@ app.*.map.json
 # Gradle 缓存与本机路径（不应该入库）
 /.gradle/
 /android/.gradle/
+/android/.kotlin/
 local.properties

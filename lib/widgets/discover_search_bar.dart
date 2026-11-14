@@ -3,12 +3,10 @@ import 'package:material_ui/material_ui.dart';
 /// 「发现」页顶部搜索栏。
 ///
 /// 收起态：标题右侧的一枚小搜索框（胶囊）；
-/// 展开态：点击后按 Material 3 的 emphasized 曲线横向拉长，铺满整条 bar。
+/// 展开态：点击后横向拉长，铺满整条 bar。
 ///
-/// 动效遵循 M3 spec：
-/// * 展开用 [Durations.medium4] + [Easing.emphasizedDecelerate]（入场减速）；
-/// * 收起用 [Durations.medium3] + [Easing.emphasizedAccelerate]（出场加速）；
-/// * 标题的淡出/淡入用 standard 曲线，时长更短，避免抢戏。
+/// 动效保持朴素：统一用 [Durations.medium2] + [Curves.easeInOutCubic]，
+/// 展开与收起对称，不做 emphasized 的分段曲线。
 class DiscoverSearchBar extends StatefulWidget {
   const DiscoverSearchBar({
     super.key,
@@ -112,14 +110,12 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
               ignoring: expanded,
               child: AnimatedOpacity(
                 opacity: expanded ? 0 : 1,
-                duration: expanded ? Durations.short2 : Durations.medium2,
-                curve: expanded ? Easing.standardAccelerate : Easing.standardDecelerate,
+                duration: Durations.short4,
+                curve: Curves.easeInOutCubic,
                 child: AnimatedSlide(
-                  offset: expanded ? const Offset(0, -0.12) : Offset.zero,
-                  duration: expanded ? Durations.short2 : Durations.medium2,
-                  curve: expanded
-                      ? Easing.standardAccelerate
-                      : Easing.standardDecelerate,
+                  offset: expanded ? const Offset(0, -0.08) : Offset.zero,
+                  duration: Durations.short4,
+                  curve: Curves.easeInOutCubic,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 16),
                     child: Row(
@@ -151,10 +147,8 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
             Align(
               alignment: Alignment.centerRight,
               child: AnimatedContainer(
-                duration: expanded ? Durations.medium4 : Durations.medium3,
-                curve: expanded
-                    ? Easing.emphasizedDecelerate
-                    : Easing.emphasizedAccelerate,
+                duration: Durations.medium2,
+                curve: Curves.easeInOutCubic,
                 width: expanded ? fullWidth : DiscoverSearchBar.compactWidth,
                 height: DiscoverSearchBar.barHeight,
                 margin: EdgeInsets.only(right: expanded ? 0 : 16),
@@ -175,11 +169,9 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
                   child: Row(
                     children: <Widget>[
                       AnimatedSwitcher(
-                        duration: expanded
-                            ? Durations.medium2
-                            : Durations.short3,
-                        switchInCurve: Easing.standardDecelerate,
-                        switchOutCurve: Easing.standardAccelerate,
+                        duration: Durations.short4,
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
                         transitionBuilder: (child, animation) =>
                             FadeTransition(opacity: animation, child: child),
                         child: expanded

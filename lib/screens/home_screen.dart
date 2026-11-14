@@ -33,6 +33,9 @@ class _HomeScreenState extends State<HomeScreen>
   String? _searchQuery;
   int _searchNonce = 0;
 
+  /// 搜索栏的位置，用于作品号直达时从搜索框长出来。
+  final GlobalKey _searchBarKey = GlobalKey();
+
   @override
   bool get wantKeepAlive => true;
 
@@ -65,8 +68,17 @@ class _HomeScreenState extends State<HomeScreen>
     final albumId = albumIdFromQuery(keyword);
     if (albumId != null) {
       context.read<AppState>().addSearchHistory(keyword.trim());
-      _setSearchExpanded(false);
-      openAlbumPreviewFromCenter(context, albumId: albumId);
+      // 顺序很重要：先开作品页，收起搜索另起一帧。
+      // 并行的话「搜索框缩短 + 面板淡出 + 作品页展开」三套动画同时推，
+      // 画面会一起乱动。
+      openAlbumPreviewFromCenter(
+        context,
+        albumId: albumId,
+        originKey: _searchBarKey,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _setSearchExpanded(false);
+      });
       return;
     }
 
@@ -115,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen>
       appBar: M3EAppBar.top(
         automaticallyImplyLeading: false,
         title: DiscoverSearchBar(
+          key: _searchBarKey,
           controller: _searchInput,
           expanded: _searchExpanded,
           onExpandedChanged: _setSearchExpanded,
@@ -124,59 +137,77 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ),
-      body: _searchExpanded
-          ? DiscoverSearchPanel(
-              query: _searchQuery,
-              searchNonce: _searchNonce,
-              onKeywordSelected: (keyword) => _searchInput.text = keyword,
-            )
-          : (!app.ready && app.error != null
-              ? ErrorView(message: app.error!, onRetry: app.bootstrap)
-              : FutureBuilder<_HomeData>(
-              future: _future,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const LoadingView(message: '正在连接线路…');
-                }
-                if (snapshot.hasError) {
-                  return ErrorView(
-                    message: '${snapshot.error}',
-                    onRetry: _refresh,
-                  );
-                }
-                final data = snapshot.data!;
-                return RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: CustomScrollView(
-                    slivers: <Widget>[
-                      for (final section in data.sections)
-                        if (section.items.isNotEmpty)
-                          _sectionSliver(section, app.imgHost),
-                      if (data.latest.isNotEmpty) ...<Widget>[
-                        SliverToBoxAdapter(
-                          child: SectionHeader(
-                            title: '最新更新',
-                            onMore: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const LatestListScreen(),
-                              ),
+      // 内容区：搜索面板与推荐流的切换用普通淡入淡出。
+      body: AnimatedSwitcher(
+        duration: Durations.short4,
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: _searchExpanded
+            ? DiscoverSearchPanel(
+                key: const ValueKey<String>('search-panel'),
+                query: _searchQuery,
+                searchNonce: _searchNonce,
+                onKeywordSelected: (keyword) => _searchInput.text = keyword,
+              )
+            : KeyedSubtree(
+                key: const ValueKey<String>('home-feed'),
+                child: !app.ready && app.error != null
+                    ? ErrorView(message: app.error!, onRetry: app.bootstrap)
+                    : FutureBuilder<_HomeData>(
+                        future: _future,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const LoadingView(message: '正在连接线路…');
+                          }
+                          if (snapshot.hasError) {
+                            return ErrorView(
+                              message: '${snapshot.error}',
+                              onRetry: _refresh,
+                            );
+                          }
+                          final data = snapshot.data!;
+                          return RefreshIndicator(
+                            onRefresh: _refresh,
+                            child: CustomScrollView(
+                              slivers: <Widget>[
+                                for (final section in data.sections)
+                                  if (section.items.isNotEmpty)
+                                    _sectionSliver(section, app.imgHost),
+                                if (data.latest.isNotEmpty) ...<Widget>[
+                                  SliverToBoxAdapter(
+                                    child: SectionHeader(
+                                      title: '最新更新',
+                                      onMore: () => Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) =>
+                                              const LatestListScreen(),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  _albumGrid(data.latest, app.imgHost),
+                                ],
+                                if (data.serialization.items.isNotEmpty)
+                                  ...<Widget>[
+                                    const SliverToBoxAdapter(
+                                      child: SectionHeader(title: '连载更新'),
+                                    ),
+                                    _albumGrid(
+                                      data.serialization.items,
+                                      app.imgHost,
+                                    ),
+                                  ],
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 24),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                        _albumGrid(data.latest, app.imgHost),
-                      ],
-                      if (data.serialization.items.isNotEmpty) ...<Widget>[
-                        const SliverToBoxAdapter(
-                          child: SectionHeader(title: '连载更新'),
-                        ),
-                        _albumGrid(data.serialization.items, app.imgHost),
-                      ],
-                      const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                    ],
-                  ),
-                );
-              },
-            )),
+                          );
+                        },
+                      ),
+              ),
+      ),
     );
   }
 

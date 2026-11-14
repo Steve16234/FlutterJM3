@@ -34,10 +34,39 @@ class _CommentSectionState extends State<CommentSection> {
   bool _loadedOnce = false;
   String? _error;
 
+  /// 发评论弹层是否展开。
+  bool _composerOpen = false;
+
   @override
   void initState() {
     super.initState();
     _loadMore();
+  }
+
+  /// 打开写评论弹层。未登录直接引导到登录页。
+  Future<void> _openComposer() async {
+    if (!context.read<AppState>().loggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在底栏「登录」页登录')),
+      );
+      return;
+    }
+    setState(() => _composerOpen = true);
+  }
+
+  /// 发送成功后把「加载过的页」整体重拉一次。
+  ///
+  /// 新评论出现在首页顶部，逐页 append 的话会把旧的第 1 页顶掉，
+  /// 这里干脆从 0 重来，页码与 `_total` 都能保持自洽。
+  Future<void> _reload() async {
+    setState(() {
+      _items.clear();
+      _page = 0;
+      _total = 0;
+      _loadedOnce = false;
+      _error = null;
+    });
+    await _loadMore();
   }
 
   Future<void> _loadMore() async {
@@ -81,6 +110,22 @@ class _CommentSectionState extends State<CommentSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // 写评论面板（默认收起，不占位）。
+        AnimatedSize(
+          duration: Durations.medium2,
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _composerOpen
+              ? _CommentComposer(
+                  albumId: widget.albumId,
+                  onCancel: () => setState(() => _composerOpen = false),
+                  onSent: () {
+                    setState(() => _composerOpen = false);
+                    _reload();
+                  },
+                )
+              : const SizedBox(width: double.infinity),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
           child: Row(
@@ -108,6 +153,18 @@ class _CommentSectionState extends State<CommentSection> {
                         ),
                   ),
                 ),
+              const Spacer(),
+              // 写评论入口：做成一眼可点的小按钮，长按区域足够。
+              TextButton.icon(
+                onPressed: _openComposer,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('写评论'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 36),
+                ),
+              ),
             ],
           ),
         ),
@@ -189,6 +246,185 @@ class _CommentSectionState extends State<CommentSection> {
                   ),
           ),
       ],
+    );
+  }
+}
+
+/// 写评论面板：正文输入 + 剧透开关 + 发表。
+///
+/// 默认收起，点标题行的「写评论」展开。正文上限 200 字（与服务端一致），
+/// 剧透开关打开后以 `spoiler=2` 提交，列表里对应的评论会自动折叠。
+class _CommentComposer extends StatefulWidget {
+  const _CommentComposer({
+    required this.albumId,
+    required this.onCancel,
+    required this.onSent,
+  });
+
+  final String albumId;
+  final VoidCallback onCancel;
+
+  /// 发表成功后回调，由父级收起面板并重拉列表。
+  final VoidCallback onSent;
+
+  @override
+  State<_CommentComposer> createState() => _CommentComposerState();
+}
+
+class _CommentComposerState extends State<_CommentComposer> {
+  static const int _maxLength = 200;
+
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focus = FocusNode();
+
+  bool _spoiler = false;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 展开后自动聚焦，少点一下。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _sending) return;
+
+    setState(() => _sending = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await context.read<AppState>().client.sendComment(
+            aid: widget.albumId,
+            content: text,
+            spoiler: _spoiler,
+          );
+      if (!mounted) return;
+      setState(() => _sending = false);
+
+      messenger.showSnackBar(SnackBar(content: Text(result.message)));
+      if (result.ok) {
+        // 成功后立刻清空并收起，避免用户再点一次撞上限流。
+        _controller.clear();
+        widget.onSent();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final length = _controller.text.characters.length;
+    final canSend = _controller.text.trim().isNotEmpty && !_sending;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 28, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            TextField(
+              controller: _controller,
+              focusNode: _focus,
+              minLines: 3,
+              maxLines: 8,
+              maxLength: _maxLength,
+              textInputAction: TextInputAction.newline,
+              enabled: !_sending,
+              // `maxLength` 自带的计数器吃掉不少高度，这里自己画。
+              buildCounter: (
+                context, {
+                required currentLength,
+                required isFocused,
+                required maxLength,
+              }) =>
+                  null,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: _spoiler ? '剧透内容会被折叠，需点击才显示' : '说点什么吧…',
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+              ),
+              style: textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: <Widget>[
+                // 剧透开关：用 FilterChip 而不是 Switch，点击区域更大、语义更直白。
+                FilterChip(
+                  selected: _spoiler,
+                  onSelected: _sending
+                      ? null
+                      : (v) => setState(() => _spoiler = v),
+                  avatar: Icon(
+                    Icons.visibility_off_outlined,
+                    size: 16,
+                    color: _spoiler
+                        ? scheme.onSecondaryContainer
+                        : scheme.onSurfaceVariant,
+                  ),
+                  label: const Text('剧透'),
+                  labelStyle: textTheme.labelMedium,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const Spacer(),
+                Text(
+                  '$length/$_maxLength',
+                  style: textTheme.labelSmall?.copyWith(
+                    color: length >= _maxLength
+                        ? scheme.error
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _sending ? null : widget.onCancel,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('取消'),
+                ),
+                const SizedBox(width: 4),
+                FilledButton(
+                  onPressed: canSend ? _send : null,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: _sending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('发表'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -460,6 +460,63 @@ class PagedComments {
   }
 }
 
+/// 发评论结果（`comment` 返回 `{msg, status}`）。
+///
+/// 官方客户端判定成功的条件是 `status === "ok"`，其余一律当失败处理，
+/// 并把服务端的 `msg` 直接弹给用户。
+class CommentSendResult {
+  const CommentSendResult({
+    required this.ok,
+    required this.rejected,
+    required this.message,
+  });
+
+  final bool ok;
+
+  /// 服务端明确拒绝（限流 / 参数错误等）。此时重试无用，直接把文案给用户。
+  final bool rejected;
+
+  /// 服务端返回的提示文案，失败时可直接展示。
+  final String message;
+
+  /// 这几个关键字出现时，服务端实际没有写入，属于「没发成功」。
+  /// 最典型的是发评论限流：「勿短时间重复留言，请重新确认留言内容」。
+  static const List<String> _rejectHints = <String>[
+    '勿短',
+    '重复留言',
+    '失敗',
+    '失败',
+    '錯誤',
+    '错误',
+  ];
+
+  factory CommentSendResult.fromJson(dynamic json) {
+    if (json is Map) {
+      final map = json.cast<String, dynamic>();
+      final msg = _asString(map['msg']);
+      final status = _asString(map['status']).toLowerCase();
+      final rejected = _rejectHints.any(msg.contains) ||
+          (status.isNotEmpty && status != 'ok');
+
+      return CommentSendResult(
+        // 只要没被明确拒绝，就当已经写入；否则用户会重复点击，反而触发限流。
+        ok: !rejected,
+        rejected: rejected,
+        message: msg.isEmpty ? (rejected ? '发表失败' : '发表成功') : msg,
+      );
+    }
+    if (json is String && json.isNotEmpty) {
+      return CommentSendResult(ok: false, rejected: true, message: json);
+    }
+    // 服务端回包为空或非 Map：同样不能当失败，否则会诱发重复提交。
+    return const CommentSendResult(
+      ok: true,
+      rejected: false,
+      message: '发表成功',
+    );
+  }
+}
+
 /// 影片条目。
 class VideoItem {
   const VideoItem({
