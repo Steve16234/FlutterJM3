@@ -5,9 +5,9 @@ import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../widgets/album_card.dart';
 import '../widgets/comment_section.dart';
 import '../widgets/common.dart';
+import '../widgets/openable_album.dart';
 import 'reader_screen.dart';
 
 /// 漫画详情页。
@@ -115,14 +115,6 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
           from: rect,
           child: child,
         ),
-      ),
-    );
-  }
-
-  void _openAlbum(String id) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AlbumDetailScreen(albumId: id),
       ),
     );
   }
@@ -247,10 +239,9 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         final item = album.related[index];
-                        return AlbumCard(
+                        return OpenableAlbumCard(
                           album: item,
                           imgHost: imgHost,
-                          onTap: () => _openAlbum(item.id),
                         );
                       },
                       childCount: album.related.length,
@@ -362,10 +353,9 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
         separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final album = albums[index];
-          return AlbumTileCompact(
+          return OpenableAlbumTileCompact(
             album: album,
             imgHost: imgHost,
-            onTap: () => _openAlbum(album.id),
           );
         },
       ),

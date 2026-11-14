@@ -7,6 +7,7 @@ import 'core/page_cache.dart';
 import 'screens/start_screen.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
+import 'theme/m3e_bridge.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +38,11 @@ class FlutterJMApp extends StatelessWidget {
             theme: AppTheme.light(null),
             darkTheme: AppTheme.dark(null),
             themeMode: themeMode,
+            // 在 MaterialApp 内部再包一层 M3E 主题：
+            // material_3_expressive 的组件靠 M3ETheme.of(context) 取 token，
+            // 放这里能跟随上面的明暗 / 主题模式自动更新。
+            builder: (context, child) =>
+                M3EBridge(child: child ?? const SizedBox.shrink()),
             // 起始页：四条线路自动测速，选线路后进入主框架。
             home: const StartScreen(),
           );

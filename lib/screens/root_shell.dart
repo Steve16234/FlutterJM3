@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -52,27 +53,28 @@ class _RootShellState extends State<RootShell> {
             _built[i] ? _pages[i] : const SizedBox.shrink(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      // M3E 导航栏：选中胶囊用弹簧动画切换，按压自带触觉。
+      bottomNavigationBar: M3ENavigationBar(
         selectedIndex: _index,
         onDestinationSelected: _select,
-        destinations: <Widget>[
-          const NavigationDestination(
+        destinations: <M3ENavigationBarDestination>[
+          const M3ENavigationBarDestination(
             icon: Icon(Icons.explore_outlined),
             selectedIcon: Icon(Icons.explore),
             label: '发现',
           ),
-          const NavigationDestination(
+          const M3ENavigationBarDestination(
             icon: Icon(Icons.bookmarks_outlined),
             selectedIcon: Icon(Icons.bookmarks),
             label: '书库',
           ),
           // 第三页：未登录时叫「登录」，登录后叫「我的」。
-          NavigationDestination(
+          M3ENavigationBarDestination(
             icon: Icon(loggedIn ? Icons.person : Icons.login_outlined),
             selectedIcon: Icon(loggedIn ? Icons.person : Icons.login),
             label: loggedIn ? '我的' : '登录',
           ),
-          NavigationDestination(
+          const M3ENavigationBarDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: '设置',

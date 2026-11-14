@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -95,7 +96,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('站内通知')),
+      appBar: M3EAppBar.top(
+        titleText: '站内通知',
+        leading: const BackButton(),
+      ),
       body: _loading
           ? const LoadingView()
           : _error != null

@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../core/comic_query.dart';
 import '../data/models.dart';
-import '../screens/album_detail_screen.dart';
 import '../state/app_state.dart';
-import 'album_card.dart';
+import 'album_open_transition.dart';
 import 'common.dart';
+import 'openable_album.dart';
 
 /// 「发现」页内的搜索面板：搜索历史 + 热门标签 + 结果分页。
 ///
@@ -137,23 +137,11 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
     // 不能当成关键词去搜。
     final albumId = albumIdFromQuery(keyword);
     if (albumId != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => AlbumDetailScreen(albumId: albumId),
-        ),
-      );
+      openAlbumPreviewFromCenter(context, albumId: albumId);
       return;
     }
 
     _search(keyword);
-  }
-
-  void _open(AlbumSummary album) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AlbumDetailScreen(albumId: album.id),
-      ),
-    );
   }
 
   @override
@@ -273,11 +261,7 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
                 );
               }
               final album = _results[index];
-              return AlbumListTile(
-                album: album,
-                imgHost: imgHost,
-                onTap: () => _open(album),
-              );
+              return OpenableAlbumListTile(album: album, imgHost: imgHost);
             },
           ),
         ),

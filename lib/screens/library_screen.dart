@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -85,7 +86,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     super.build(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('书库')),
+      appBar: M3EAppBar.top(titleText: '书库'),
       body: FutureBuilder<List<Category>>(
         future: _categories,
         builder: (context, snapshot) {

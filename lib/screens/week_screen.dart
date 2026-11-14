@@ -1,11 +1,11 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../widgets/album_card.dart';
 import '../widgets/common.dart';
-import 'album_detail_screen.dart';
+import '../widgets/openable_album.dart';
 
 /// 每週必看：先选期数，再看该期榜单。
 class WeekScreen extends StatefulWidget {
@@ -44,7 +44,10 @@ class _WeekScreenState extends State<WeekScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('每週必看')),
+      appBar: M3EAppBar.top(
+        titleText: '每週必看',
+        leading: const BackButton(),
+      ),
       body: FutureBuilder<List<WeekIssue>>(
         future: _issues,
         builder: (context, snapshot) {
@@ -122,10 +125,11 @@ class _WeekDetailScreenState extends State<_WeekDetailScreen> {
     final imgHost = context.watch<AppState>().imgHost;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.issue.time.isEmpty
+      appBar: M3EAppBar.top(
+        titleText: widget.issue.time.isEmpty
             ? '第 ${widget.issue.id} 期'
-            : widget.issue.time),
+            : widget.issue.time,
+        leading: const BackButton(),
       ),
       body: FutureBuilder<PagedAlbums>(
         future: _future,
@@ -155,15 +159,7 @@ class _WeekDetailScreenState extends State<_WeekDetailScreen> {
             itemCount: albums.length,
             itemBuilder: (context, index) {
               final album = albums[index];
-              return AlbumCard(
-                album: album,
-                imgHost: imgHost,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => AlbumDetailScreen(albumId: album.id),
-                  ),
-                ),
-              );
+              return OpenableAlbumCard(album: album, imgHost: imgHost);
             },
           );
         },

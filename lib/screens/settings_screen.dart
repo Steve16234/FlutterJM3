@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -77,7 +78,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
+      appBar: M3EAppBar.top(titleText: '设置'),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: <Widget>[

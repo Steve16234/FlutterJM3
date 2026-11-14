@@ -3,9 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../widgets/album_card.dart';
 import '../widgets/common.dart';
-import 'album_detail_screen.dart';
+import '../widgets/openable_album.dart';
 
 /// 分页数据源签名：给定页码返回一页数据。
 typedef PageLoader = Future<PagedAlbums> Function(int page);
@@ -99,14 +98,6 @@ class _PagedAlbumScreenState extends State<PagedAlbumScreen> {
     await _loadNext();
   }
 
-  void _open(AlbumSummary album) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AlbumDetailScreen(albumId: album.id),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final imgHost = context.watch<AppState>().imgHost;
@@ -196,11 +187,8 @@ class _PagedAlbumScreenState extends State<PagedAlbumScreen> {
                   childAspectRatio: 0.52,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => AlbumCard(
-                    album: _items[index],
-                    imgHost: imgHost,
-                    onTap: () => _open(_items[index]),
-                  ),
+                  (context, index) =>
+                      OpenableAlbumCard(album: _items[index], imgHost: imgHost),
                   childCount: _items.length,
                 ),
               ),
@@ -222,10 +210,9 @@ class _PagedAlbumScreenState extends State<PagedAlbumScreen> {
           if (index == _items.length) {
             return Column(children: footer);
           }
-          return AlbumListTile(
+          return OpenableAlbumListTile(
             album: _items[index],
             imgHost: imgHost,
-            onTap: () => _open(_items[index]),
           );
         },
       ),

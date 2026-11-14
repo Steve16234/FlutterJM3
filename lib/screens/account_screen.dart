@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -110,7 +111,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final app = context.watch<AppState>();
 
     return Scaffold(
-      appBar: AppBar(title: Text(app.loggedIn ? '我的' : '登录')),
+      appBar: M3EAppBar.top(titleText: app.loggedIn ? '我的' : '登录'),
       body: app.loggedIn ? _buildProfile(app) : _buildForm(),
     );
   }

@@ -40,6 +40,8 @@ dependencies:
   crypto: ^3.0.8
   provider: ^6.1.5+1
   path_provider: ^2.1.5
+  # Material 3 Expressive 组件集（卡片容器变换、导航栏、AppBar、弹簧物理）
+  material_3_expressive: ^1.2.1
 
 dev_dependencies:
   flutter_test:

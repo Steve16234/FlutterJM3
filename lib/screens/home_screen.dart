@@ -4,11 +4,11 @@ import 'package:provider/provider.dart';
 import '../core/comic_query.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../widgets/album_card.dart';
+import '../widgets/album_open_transition.dart';
 import '../widgets/common.dart';
 import '../widgets/discover_search_bar.dart';
+import '../widgets/openable_album.dart';
 import '../widgets/search_panel.dart';
-import 'album_detail_screen.dart';
 import 'album_list_screen.dart';
 import 'week_screen.dart';
 
@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (albumId != null) {
       context.read<AppState>().addSearchHistory(keyword.trim());
       _setSearchExpanded(false);
-      _openAlbum(albumId);
+      openAlbumPreviewFromCenter(context, albumId: albumId);
       return;
     }
 
@@ -101,14 +101,6 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _refresh() async {
     setState(() => _future = _load());
     await _future;
-  }
-
-  void _openAlbum(String id) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AlbumDetailScreen(albumId: id),
-      ),
-    );
   }
 
   @override
@@ -214,10 +206,9 @@ class _HomeScreenState extends State<HomeScreen>
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final album = section.items[index];
-                return AlbumTileCompact(
+                return OpenableAlbumTileCompact(
                   album: album,
                   imgHost: imgHost,
-                  onTap: () => _openAlbum(album.id),
                 );
               },
             ),
@@ -240,10 +231,9 @@ class _HomeScreenState extends State<HomeScreen>
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final album = albums[index];
-            return AlbumCard(
+            return OpenableAlbumCard(
               album: album,
               imgHost: imgHost,
-              onTap: () => _openAlbum(album.id),
             );
           },
           childCount: albums.length,

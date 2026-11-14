@@ -1,12 +1,12 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/account_models.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../widgets/album_card.dart';
 import '../widgets/common.dart';
-import 'album_detail_screen.dart';
+import '../widgets/openable_album.dart';
 
 /// 账号相关列表：我的收藏 / 浏览历史 / 我的关注。
 ///
@@ -99,7 +99,10 @@ class _AccountAlbumsScreenState extends State<AccountAlbumsScreen> {
     final imgHost = context.watch<AppState>().imgHost;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: M3EAppBar.top(
+        titleText: widget.title,
+        leading: const BackButton(),
+      ),
       body: _buildBody(imgHost),
     );
   }
@@ -140,15 +143,7 @@ class _AccountAlbumsScreenState extends State<AccountAlbumsScreen> {
             );
           }
           final album = _items[index];
-          return AlbumCard(
-            album: album,
-            imgHost: imgHost,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => AlbumDetailScreen(albumId: album.id),
-              ),
-            ),
-          );
+          return OpenableAlbumCard(album: album, imgHost: imgHost);
         },
       ),
     );
