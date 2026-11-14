@@ -127,10 +127,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: app.client.hosts.map((host) {
                   final isCurrent =
                       app.baseUrl != null && app.baseUrl!.contains(host);
-                  return ChoiceChip(
-                    label: Text(host),
+                  return M3EChip(
+                    label: host,
+                    type: M3EChipType.filter,
                     selected: isCurrent,
-                    onSelected: (_) async {
+                    onPressed: () async {
                       await app.switchHost(host);
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(

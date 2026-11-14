@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -168,8 +169,9 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
               spacing: 8,
               runSpacing: 8,
               children: history
-                  .map((k) => ActionChip(
-                        label: Text(k),
+                  .map((k) => M3EChip(
+                        label: k,
+                        type: M3EChipType.suggestion,
                         onPressed: () => _pick(k),
                       ))
                   .toList(),
@@ -186,8 +188,9 @@ class _DiscoverSearchPanelState extends State<DiscoverSearchPanel> {
               children: _hotTags.map((raw) {
                 final name = _tagName(raw);
                 if (name.isEmpty) return const SizedBox.shrink();
-                return ActionChip(
-                  label: Text(name),
+                return M3EChip(
+                  label: name,
+                  type: M3EChipType.suggestion,
                   onPressed: () => _pick(name),
                 );
               }).toList(),

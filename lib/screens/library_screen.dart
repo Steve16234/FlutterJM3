@@ -183,8 +183,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                 spacing: 8,
                 runSpacing: 8,
                 children: category.subCategories
-                    .map((sub) => ActionChip(
-                          label: Text(sub.name),
+                    .map((sub) => M3EChip(
+                          label: sub.name,
+                          type: M3EChipType.suggestion,
                           onPressed: () => _openCategory(category, sub: sub),
                         ))
                     .toList(),

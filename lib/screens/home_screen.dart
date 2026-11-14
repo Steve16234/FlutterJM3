@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -109,10 +110,10 @@ class _HomeScreenState extends State<HomeScreen>
     final app = context.watch<AppState>();
 
     return Scaffold(
-      appBar: AppBar(
-        // 收起态：标题 + 小搜索框；展开态：搜索框拉长铺满整条 bar。
+      // 收起态：标题 + 小搜索框；展开态：搜索框拉长铺满整条 bar。
+      // 搜索框本身仍是自绘的（伸缩交互太多），只把外壳换成 M3EAppBar。
+      appBar: M3EAppBar.top(
         automaticallyImplyLeading: false,
-        titleSpacing: 0,
         title: DiscoverSearchBar(
           controller: _searchInput,
           expanded: _searchExpanded,

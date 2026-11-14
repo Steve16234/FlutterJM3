@@ -150,15 +150,19 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                 expandedHeight: coverHeight,
                 pinned: true,
                 actions: <Widget>[
-                  IconButton(
+                  M3EIconButton(
+                    variant: M3EIconButtonVariant.standard,
                     tooltip: _favorited ? '已收藏' : '收藏',
+                    haptic: M3EHapticFeedback.light,
                     onPressed: () => _favorite(album.id),
                     icon: Icon(
                       _favorited ? Icons.favorite : Icons.favorite_border,
                     ),
                   ),
-                  IconButton(
+                  M3EIconButton(
+                    variant: M3EIconButtonVariant.standard,
                     tooltip: _tracked ? '已关注' : '关注',
+                    haptic: M3EHapticFeedback.light,
                     onPressed: () => _track(album.id),
                     icon: Icon(
                       _tracked ? Icons.bookmark : Icons.bookmark_border,

@@ -89,13 +89,14 @@ class _AccountScreenState extends State<AccountScreen> {
         title: const Text('退出登录'),
         content: const Text('退出后收藏、评论等操作需要重新登录。'),
         actions: <Widget>[
-          TextButton(
+          M3EButton(
+            style: M3EButtonStyle.text,
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+            label: const Text('取消'),
           ),
-          FilledButton(
+          M3EButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('退出'),
+            label: const Text('退出'),
           ),
         ],
       ),
