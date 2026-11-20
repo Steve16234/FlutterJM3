@@ -6,8 +6,22 @@ import 'package:flutterjm/core/gateway_client.dart';
 import 'package:flutterjm/screens/album_detail_screen.dart';
 import 'package:flutterjm/screens/home_screen.dart';
 import 'package:flutterjm/state/app_state.dart';
+import 'package:flutterjm/theme/prism_host.dart';
 
 import 'support/fake_gateway.dart';
+
+/// prism 组件需要 ViewScope / MeasureScope / BannerHost / 本地化，
+/// 和 main.dart 一样用 PrismHost 包一层。
+Widget _shell(Widget child) => MaterialApp(
+  localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+    JmUiLocalizations.delegate,
+  ],
+  builder: (context, inner) => PrismHost(
+    brightness: Theme.of(context).brightness,
+    child: inner ?? const SizedBox.shrink(),
+  ),
+  home: child,
+);
 
 void main() {
   testWidgets('点搜索历史里的 JM 号直达作品页', (tester) async {
@@ -29,14 +43,14 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<AppState>.value(
         value: app,
-        child: const MaterialApp(home: HomeScreen()),
+        child: _shell(const HomeScreen()),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     // 展开搜索 -> 出现搜索历史 -> 点那条 JM 号
-    await tester.tap(find.byType(TextField).first);
+    await tester.tap(find.text('搜索'));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('JM1488098'), findsOneWidget);
 
@@ -58,14 +72,14 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<AppState>.value(
         value: app,
-        child: const MaterialApp(home: HomeScreen()),
+        child: _shell(const HomeScreen()),
       ),
     );
     await tester.pump();
     app.addSearchHistory('催眠');
     await tester.pump();
 
-    await tester.tap(find.byType(TextField).first);
+    await tester.tap(find.text('搜索'));
     await tester.pump(const Duration(milliseconds: 400));
 
     await tester.tap(find.text('催眠'));

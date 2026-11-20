@@ -1,13 +1,24 @@
-import 'package:material_3_expressive/material_3_expressive.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/widgets.dart';
+import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import '../widgets/common.dart';
+import '../ui/icons/icons.dart';
+import '../ui/page.dart';
+import '../ui/rows.dart';
+import '../ui/section.dart';
+import '../ui/states.dart';
 import '../widgets/openable_album.dart';
 
 /// 每週必看：先选期数，再看该期榜单。
+///
+/// 两级页面（期数列表 → 单期榜单）都在本文件里，表现层换成 prism_ui：
+/// 列表用 `SectionCard` + `NavigationRow`（一行一期，右侧 chevron），
+/// 榜单用 `AlbumCard`（经由 `OpenableAlbumCard`，卡片长成全页的容器变换保持原样）。
+///
+/// **数据流没变**：`client.week()` / `client.weekFilter(id:)` 的调用点、参数，
+/// 以及「进页面就加载，不等转场结束」（`didChangeDependencies`）都和旧实现一致。
 class WeekScreen extends StatefulWidget {
   const WeekScreen({super.key});
 
@@ -35,60 +46,51 @@ class _WeekScreenState extends State<WeekScreen> {
 
   void _openIssue(WeekIssue issue) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _WeekDetailScreen(issue: issue),
-      ),
+      CardPageRoute<void>(builder: (_) => _WeekDetailScreen(issue: issue)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        titleText: '每週必看',
-        leading: const BackButton(),
-      ),
+    return JmPage(
+      title: '每週必看',
       body: FutureBuilder<List<WeekIssue>>(
         future: _issues,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingView();
+            return const JmLoading(label: '正在加载期数…');
           }
           if (snapshot.hasError) {
-            return ErrorView(
+            return JmError(
               message: '${snapshot.error}',
               onRetry: () => setState(() => _issues = _loadIssues()),
             );
           }
+
           final issues = snapshot.data ?? const <WeekIssue>[];
           if (issues.isEmpty) {
-            return const EmptyView(message: '暂无榜单');
+            return const JmEmpty(message: '暂无榜单');
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: issues.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
-            itemBuilder: (context, index) {
-              final issue = issues[index];
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor:
-                      Theme.of(context).colorScheme.secondaryContainer,
-                  child: Text(
-                    issue.id,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSecondaryContainer,
+          return ListView(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 24 + context.bottomInset),
+            children: <Widget>[
+              // 一期一行、行间发丝线由 `SectionCard` 统一画（不用 Divider 手写）。
+              SectionCard(
+                children: <Widget>[
+                  for (final issue in issues)
+                    NavigationRow(
+                      glyph: AppGlyphs.clock,
+                      title: issue.time.isEmpty ? '第 ${issue.id} 期' : issue.time,
+                      // 期号：旧列表把它画在左侧头像里，这里放到 chevron 左边。
+                      trailing: issue.time.isEmpty
+                          ? null
+                          : MetaChip(label: issue.id),
+                      onPressed: () => _openIssue(issue),
                     ),
-                  ),
-                ),
-                title: Text(issue.time.isEmpty ? '第 ${issue.id} 期' : issue.time),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _openIssue(issue),
-              );
-            },
+                ],
+              ),
+            ],
           );
         },
       ),
@@ -96,6 +98,7 @@ class _WeekScreenState extends State<WeekScreen> {
   }
 }
 
+/// 某一期的榜单（二级页面，保留返回箭头）。
 class _WeekDetailScreen extends StatefulWidget {
   const _WeekDetailScreen({required this.issue});
 
@@ -124,43 +127,57 @@ class _WeekDetailScreenState extends State<_WeekDetailScreen> {
   Widget build(BuildContext context) {
     final imgHost = context.watch<AppState>().imgHost;
 
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        titleText: widget.issue.time.isEmpty
-            ? '第 ${widget.issue.id} 期'
-            : widget.issue.time,
-        leading: const BackButton(),
-      ),
+    return JmPage(
+      title: widget.issue.time.isEmpty
+          ? '第 ${widget.issue.id} 期'
+          : widget.issue.time,
       body: FutureBuilder<PagedAlbums>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingView();
+            return const JmLoading(label: '正在加载榜单…');
           }
           if (snapshot.hasError) {
-            return ErrorView(
+            return JmError(
               message: '${snapshot.error}',
               onRetry: () => setState(() => _future = _load()),
             );
           }
+
           final albums = snapshot.data?.items ?? const <AlbumSummary>[];
           if (albums.isEmpty) {
-            return const EmptyView(message: '该期暂无内容');
+            return const JmEmpty(message: '该期暂无内容');
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 190,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.52,
-            ),
-            itemCount: albums.length,
-            itemBuilder: (context, index) {
-              final album = albums[index];
-              return OpenableAlbumCard(album: album, imgHost: imgHost);
-            },
+          return CustomScrollView(
+            slivers: <Widget>[
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  4,
+                  16,
+                  24 + context.bottomInset,
+                ),
+                sliver: SliverGrid(
+                  // 保持旧页面的比例与最大列宽：maxCrossAxisExtent 190、0.52。
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 190,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.52,
+                      ),
+                  delegate: SliverChildBuilderDelegate(
+                    // 保留「卡片长成全页」的容器变换（原来就是 OpenableAlbumCard）。
+                    (context, index) => OpenableAlbumCard(
+                      album: albums[index],
+                      imgHost: imgHost,
+                    ),
+                    childCount: albums.length,
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),

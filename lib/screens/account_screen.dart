@@ -1,16 +1,28 @@
-import 'package:material_3_expressive/material_3_expressive.dart';
-import 'package:material_ui/material_ui.dart';
+import 'dart:ui' as ui;
+
+import 'package:flutter/services.dart' show TextInputAction;
+import 'package:flutter/widgets.dart';
+import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../core/image_loader.dart';
 import '../data/account_models.dart';
 import '../state/app_state.dart';
+import '../ui/icons/icons.dart';
+import '../ui/page.dart';
+import '../ui/rows.dart';
+import '../ui/section.dart';
 import 'account_albums_screen.dart';
 import 'notifications_screen.dart';
 
 /// 账号页（底栏第三页）。
 ///
 /// 未登录时直接内嵌登录表单；已登录时展示账号信息与退出入口。
-/// 登录走 `POST login`（multipart），会话有效期 1 小时（见 [AppState.login]）。
+/// 登录走 `POST login`（multipart），会话有效期由服务端决定（见 [AppState.login]）。
+///
+/// 表现层：prism_ui（`JmPage` 骨架 + 分组行）。数据流一行没动：登录 / 登出仍走
+/// [AppState]，三个列表页仍由调用方注入 `client.favorites / watchList /
+/// trackingList` 的 loader。
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -23,6 +35,9 @@ class _AccountScreenState extends State<AccountScreen> {
   final TextEditingController _password = TextEditingController();
   final FocusNode _passwordFocus = FocusNode();
 
+  /// bar 底部那条提交进度条；表单里的转圈由 [_busy] 驱动。
+  final ValueNotifier<bool> _submitting = ValueNotifier<bool>(false);
+
   bool _obscure = true;
   bool _busy = false;
   String? _error;
@@ -32,6 +47,7 @@ class _AccountScreenState extends State<AccountScreen> {
     _account.dispose();
     _password.dispose();
     _passwordFocus.dispose();
+    _submitting.dispose();
     super.dispose();
   }
 
@@ -48,6 +64,7 @@ class _AccountScreenState extends State<AccountScreen> {
       _busy = true;
       _error = null;
     });
+    _submitting.value = true;
 
     try {
       await context
@@ -63,6 +80,8 @@ class _AccountScreenState extends State<AccountScreen> {
         _busy = false;
         _error = '$e';
       });
+    } finally {
+      if (mounted) _submitting.value = false;
     }
   }
 
@@ -71,48 +90,55 @@ class _AccountScreenState extends State<AccountScreen> {
     Future<AccountAlbumPage> Function(int page) loader,
     String empty,
   ) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AccountAlbumsScreen(
-          title: title,
-          loader: loader,
-          emptyMessage: empty,
-        ),
-      ),
+    BaseNavigator.push<void>(
+      context,
+      AccountAlbumsScreen(title: title, loader: loader, emptyMessage: empty),
     );
   }
 
+  void _openNotifications() {
+    BaseNavigator.push<void>(context, const NotificationsScreen());
+  }
+
+  /// 退出登录：破坏性动作，先确认再走 [AppState.logout]。
   Future<void> _logout(AppState app) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showFloatingDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('退出后收藏、评论等操作需要重新登录。'),
-        actions: <Widget>[
-          M3EButton(
-            style: M3EButtonStyle.text,
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            label: const Text('取消'),
-          ),
-          M3EButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            label: const Text('退出'),
-          ),
-        ],
+      child: Builder(
+        builder: (dialogContext) => AlertDialog(
+          title: '退出登录',
+          destructive: true,
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('退出'),
+            ),
+          ],
+          child: const Text('退出后收藏、评论等操作需要重新登录。'),
+        ),
       ),
     );
     if (confirmed != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
+
+    // 登出会先 await 服务端，这里先把提示入口拿在手里。
+    final banner = BannerHost.maybeOf(context);
     await app.logout();
-    messenger.showSnackBar(const SnackBar(content: Text('已退出登录')));
+    banner?.show('已退出登录');
   }
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
 
-    return Scaffold(
-      appBar: M3EAppBar.top(titleText: app.loggedIn ? '我的' : '登录'),
+    return JmPage(
+      title: app.loggedIn ? '我的' : '登录',
+      // 底栏的一级页面，没有上级可返回。
+      showBack: false,
+      loading: _submitting,
       body: app.loggedIn ? _buildProfile(app) : _buildForm(),
     );
   }
@@ -120,28 +146,32 @@ class _AccountScreenState extends State<AccountScreen> {
   // ---------------------------------------------------------------- 未登录
 
   Widget _buildForm() {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.colorScheme;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+      // 这一页在底栏框架里：底部让开浮动 dock，用 context.bottomInset 取高度。
+      padding: EdgeInsets.fromLTRB(16, 32, 16, 24 + context.bottomInset),
       children: <Widget>[
-        Icon(Icons.account_circle, size: 72, color: scheme.primary),
-        const SizedBox(height: 12),
+        Center(
+          child: GlyphIcon(AppGlyphs.account, size: 64, color: scheme.primary),
+        ),
+        const SizedBox(height: 16),
         Text(
           '禁漫账号',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleLarge,
+          style: AppTextStyle.title2.of(context, emphasized: true),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           '登录后可收藏、评论、同步浏览历史',
           textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: AppTextStyle.footnote
+              .of(context)
+              .copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 28),
+        // 登录表单只有两个字段、且是这一页的主体，属于「孤立在页面上的字段」：
+        // 描边由 AppInputBorder 自己给，调用点不设 border。
         TextField(
           controller: _account,
           enabled: !_busy,
@@ -149,9 +179,8 @@ class _AccountScreenState extends State<AccountScreen> {
           enableSuggestions: false,
           textInputAction: TextInputAction.next,
           decoration: const InputDecoration(
-            labelText: '账号 / 邮箱',
-            prefixIcon: Icon(Icons.person_outline),
-            border: OutlineInputBorder(),
+            hintText: '账号 / 邮箱',
+            prefixIcon: GlyphIcon(AppGlyphs.account),
           ),
           onSubmitted: (_) => _passwordFocus.requestFocus(),
         ),
@@ -165,15 +194,12 @@ class _AccountScreenState extends State<AccountScreen> {
           enableSuggestions: false,
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(
-            labelText: '密码',
-            prefixIcon: const Icon(Icons.lock_outline),
-            border: const OutlineInputBorder(),
+            hintText: '密码',
+            prefixIcon: const GlyphIcon(AppGlyphs.lock),
             suffixIcon: IconButton(
               tooltip: _obscure ? '显示密码' : '隐藏密码',
               onPressed: () => setState(() => _obscure = !_obscure),
-              icon: Icon(
-                _obscure ? Icons.visibility_off_outlined : Icons.visibility,
-              ),
+              icon: GlyphIcon(_obscure ? AppGlyphs.eyeOff : AppGlyphs.eye),
             ),
           ),
           onSubmitted: (_) => _submit(),
@@ -183,37 +209,33 @@ class _AccountScreenState extends State<AccountScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Icon(Icons.error_outline, size: 16, color: scheme.error),
+              GlyphIcon(AppGlyphs.warning, size: 16, color: scheme.error),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   _error!,
-                  style: TextStyle(color: scheme.error, fontSize: 12),
+                  style: AppTextStyle.caption1
+                      .of(context)
+                      .copyWith(color: scheme.error),
                 ),
               ),
             ],
           ),
         ],
         const SizedBox(height: 24),
-        M3EButton(
-          onPressed: _submit,
-          enabled: !_busy,
-          label: _busy
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? ActivityIndicator(size: 20, color: scheme.onPrimary)
               : const Text('登录'),
         ),
         const SizedBox(height: 16),
         Text(
           '登录后长期有效，服务端失效时需重新登录',
           textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: AppTextStyle.footnote
+              .of(context)
+              .copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
     );
@@ -222,15 +244,16 @@ class _AccountScreenState extends State<AccountScreen> {
   // ---------------------------------------------------------------- 已登录
 
   Widget _buildProfile(AppState app) {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.colorScheme;
     final meta = app.userId > 0 ? 'UID ${app.userId}' : '';
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+      // 同上：底部让开浮动 dock。
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + context.bottomInset),
       children: <Widget>[
         Row(
           children: <Widget>[
-            _avatar(app),
+            _ProfileAvatar(url: app.avatarUrl),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -240,15 +263,15 @@ class _AccountScreenState extends State<AccountScreen> {
                     app.username.isEmpty ? '已登录' : app.username,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: AppTextStyle.title2.of(context, emphasized: true),
                   ),
                   if (meta.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 4),
                     Text(
                       meta,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                      style: AppTextStyle.footnote
+                          .of(context)
+                          .copyWith(color: scheme.onSurfaceVariant),
                     ),
                   ],
                 ],
@@ -256,95 +279,167 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.favorite_border),
-          title: const Text('我的收藏'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _openAlbums(
-            '我的收藏',
-            (page) => app.client.favorites(page: page),
-            '还没有收藏任何作品',
-          ),
+        const SizedBox(height: 24),
+        const SectionHeader(title: '我的内容'),
+        SectionCard(
+          children: <Widget>[
+            NavigationRow(
+              glyph: AppGlyphs.heart,
+              title: '我的收藏',
+              onPressed: () => _openAlbums(
+                '我的收藏',
+                (page) => app.client.favorites(page: page),
+                '还没有收藏任何作品',
+              ),
+            ),
+            NavigationRow(
+              glyph: AppGlyphs.clock,
+              title: '浏览历史',
+              onPressed: () => _openAlbums(
+                '浏览历史',
+                (page) => app.client.watchList(page: page),
+                '还没有浏览记录',
+              ),
+            ),
+            NavigationRow(
+              glyph: AppGlyphs.bookmarks,
+              title: '我的关注',
+              onPressed: () => _openAlbums(
+                '我的关注',
+                (page) => app.client.trackingList(page: page),
+                '还没有关注的作品',
+              ),
+            ),
+            NavigationRow(
+              glyph: AppGlyphs.bell,
+              title: '站内通知',
+              onPressed: _openNotifications,
+            ),
+          ],
         ),
-        ListTile(
-          leading: const Icon(Icons.history),
-          title: const Text('浏览历史'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _openAlbums(
-            '浏览历史',
-            (page) => app.client.watchList(page: page),
-            '还没有浏览记录',
-          ),
-        ),
-        ListTile(
-          leading: const Icon(Icons.bookmark_border),
-          title: const Text('我的关注'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _openAlbums(
-            '我的关注',
-            (page) => app.client.trackingList(page: page),
-            '还没有关注的作品',
-          ),
-        ),
-        ListTile(
-          leading: const Icon(Icons.notifications_none),
-          title: const Text('站内通知'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
-          ),
-        ),
-        const Divider(),
-        const SizedBox(height: 12),
-        M3EButton(
+        const SizedBox(height: 24),
+        // 破坏性动作：`danger` 上 `ColorScheme.destructive`（iOS systemRed），
+        // 不用 `error`（那是「出错了」）。
+        SettingRow(
+          glyph: AppGlyphs.logout,
+          title: '退出登录',
+          danger: true,
           onPressed: () => _logout(app),
-          icon: const Icon(Icons.logout),
-          label: const Text('退出登录'),
         ),
         const SizedBox(height: 16),
         Text(
           '登录状态长期有效；若服务端判定失效，会自动退出并要求重新登录。',
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: AppTextStyle.footnote
+              .of(context)
+              .copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
     );
   }
+}
 
-  Widget _avatar(AppState app) {
-    final scheme = Theme.of(context).colorScheme;
-    final fallback = Icon(
-      Icons.person,
-      size: 36,
-      color: scheme.onSecondaryContainer,
-    );
-    final url = app.avatarUrl;
+/// 头像：有 `photo` 就走与封面同一条图片管线（UA / Referer / 三层缓存 / 并发合并），
+/// 没有或加载失败就显示占位 glyph，不会跳尺寸、不会自己发 http。
+class _ProfileAvatar extends StatefulWidget {
+  const _ProfileAvatar({required this.url});
 
-    if (url.isEmpty) {
-      return CircleAvatar(
-        radius: 32,
-        backgroundColor: scheme.secondaryContainer,
-        child: fallback,
-      );
+  final String url;
+
+  static const double size = 64;
+
+  @override
+  State<_ProfileAvatar> createState() => _ProfileAvatarState();
+}
+
+class _ProfileAvatarState extends State<_ProfileAvatar> {
+  static const int _avatarAid = 0;
+  static const int _avatarScrambleId = 1;
+
+  ui.Image? _image;
+
+  /// 已向缓存借出引用、还没归还的 URL。
+  String? _heldUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _release();
+      _image = null;
+      _start();
     }
-    return ClipOval(
-      child: SizedBox(
-        width: 64,
-        height: 64,
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => ColoredBox(
-            color: scheme.secondaryContainer,
-            child: Center(child: fallback),
-          ),
+  }
+
+  @override
+  void dispose() {
+    _release();
+    super.dispose();
+  }
+
+  void _release() {
+    final url = _heldUrl;
+    if (url == null) return;
+    _heldUrl = null;
+    PageImageLoader.shared.release(url);
+  }
+
+  void _start() {
+    final url = widget.url;
+    if (url.isEmpty || !url.startsWith('http')) return;
+    _fetch(url);
+  }
+
+  Future<void> _fetch(String url) async {
+    try {
+      final image = await PageImageLoader.shared.load(
+        url: url,
+        aid: _avatarAid,
+        scrambleId: _avatarScrambleId,
+      );
+      if (!mounted || widget.url != url) {
+        PageImageLoader.shared.release(url);
+        return;
+      }
+      _heldUrl = url;
+      setState(() => _image = image);
+    } catch (_) {
+      // 头像拿不到就保持占位，不影响登录态展示。
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final image = _image;
+    final placeholder = ColoredBox(
+      color: context.raisedSurfaceLevel.colorOf(scheme),
+      child: Center(
+        child: GlyphIcon(
+          AppGlyphs.account,
+          size: 32,
+          color: scheme.onSurfaceVariant,
         ),
+      ),
+    );
+    return SizedBox(
+      width: _ProfileAvatar.size,
+      height: _ProfileAvatar.size,
+      child: ClipRSuperellipse(
+        borderRadius: AppRadius.full,
+        child: image == null
+            ? placeholder
+            : RawImage(
+                image: image,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+              ),
       ),
     );
   }
 }
-

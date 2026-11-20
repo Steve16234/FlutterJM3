@@ -1,21 +1,29 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'theme_mode.dart';
 
 /// 需要持久化的设置项。
 class AppSettings {
   const AppSettings({
-    this.themeMode = ThemeMode.system,
+    this.themeMode = JmThemeMode.system,
     this.searchHistory = const <String>[],
     this.jwtToken,
     this.avs,
     this.memberInfo,
+    this.liquidGlass = true,
   });
 
   /// 主题模式（深浅色记忆就靠它）。
-  final ThemeMode themeMode;
+  final JmThemeMode themeMode;
+
+  /// 是否开启液态玻璃。
+  ///
+  /// 默认开启；不支持 shader 的设备可在设置页打开「低性能模式」关闭它，
+  /// 整体退回普通填充方案。 Already-saved settings keep their own value.
+  final bool liquidGlass;
 
   /// 搜索历史。
   final List<String> searchHistory;
@@ -38,17 +46,19 @@ class AppSettings {
   bool get hasSession => jwtToken?.isNotEmpty ?? false;
 
   AppSettings copyWith({
-    ThemeMode? themeMode,
+    JmThemeMode? themeMode,
     List<String>? searchHistory,
     String? jwtToken,
     String? avs,
     Map<String, dynamic>? memberInfo,
+    bool? liquidGlass,
     bool clearSession = false,
   }) {
     if (clearSession) {
       return AppSettings(
         themeMode: themeMode ?? this.themeMode,
         searchHistory: searchHistory ?? this.searchHistory,
+        liquidGlass: liquidGlass ?? this.liquidGlass,
       );
     }
     return AppSettings(
@@ -57,6 +67,7 @@ class AppSettings {
       jwtToken: jwtToken ?? this.jwtToken,
       avs: avs ?? this.avs,
       memberInfo: memberInfo ?? this.memberInfo,
+      liquidGlass: liquidGlass ?? this.liquidGlass,
     );
   }
 
@@ -67,6 +78,7 @@ class AppSettings {
         other.themeMode == themeMode &&
         other.jwtToken == jwtToken &&
         other.avs == avs &&
+        other.liquidGlass == liquidGlass &&
         _sameList(other.searchHistory, searchHistory) &&
         _sameJson(other.memberInfo, memberInfo);
   }
@@ -77,6 +89,7 @@ class AppSettings {
         Object.hashAll(searchHistory),
         jwtToken,
         avs,
+        liquidGlass,
         memberInfo == null ? null : jsonEncode(memberInfo),
       );
 
@@ -127,6 +140,10 @@ class SettingsStore {
         jwtToken: map['jwtToken'] as String?,
         avs: map['avs'] as String?,
         memberInfo: member is Map ? member.cast<String, dynamic>() : null,
+        // 键名从旧的 liquidGlass 换成 glassEnabled：开关语义已反转为
+        // 「低性能模式」，旧存档里的 liquidGlass=false 是「旧版默认关」，
+        // 不该让它把新版的默认开启盖掉，换键后自然回落到 true。
+        liquidGlass: map['glassEnabled'] as bool? ?? true,
       );
     } catch (_) {
       return AppSettings.defaults;
@@ -143,6 +160,8 @@ class SettingsStore {
       'jwtToken': settings.jwtToken,
       'avs': settings.avs,
       'memberInfo': settings.memberInfo,
+      // 存储键用 glassEnabled（见 read 里的注释），与旧版 liquidGlass 隔离。
+      'glassEnabled': settings.liquidGlass,
     });
     try {
       // 先写临时文件再改名，避免进程被杀时留下半个 JSON。
@@ -170,19 +189,8 @@ class SettingsStore {
     }
   }
 
-  static String _themeModeName(ThemeMode mode) {
-    return switch (mode) {
-      ThemeMode.light => 'light',
-      ThemeMode.dark => 'dark',
-      ThemeMode.system => 'system',
-    };
-  }
+  static String _themeModeName(JmThemeMode mode) => mode.storageName;
 
-  static ThemeMode _themeModeFrom(Object? value) {
-    return switch (value) {
-      'light' => ThemeMode.light,
-      'dark' => ThemeMode.dark,
-      _ => ThemeMode.system,
-    };
-  }
+  static JmThemeMode _themeModeFrom(Object? value) =>
+      JmThemeMode.fromStorage(value);
 }

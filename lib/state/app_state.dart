@@ -1,11 +1,13 @@
 import 'dart:async';
 
-import 'package:material_ui/material_ui.dart';
+// 状态层不依赖 Material：只需要 widgets 层的 ChangeNotifier 与 BuildContext。
+import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../core/chapter_cache.dart';
 import '../core/gateway_client.dart';
 import '../core/settings_store.dart';
+import '../core/theme_mode.dart';
 
 /// 全局状态：网关客户端、线路测速、主题模式、图片 CDN、搜索历史。
 class AppState extends ChangeNotifier {
@@ -27,7 +29,9 @@ class AppState extends ChangeNotifier {
   /// 启动页展示的线路数量。
   static const int lineCount = 4;
 
-  ThemeMode _themeMode = ThemeMode.system;
+  JmThemeMode _themeMode = JmThemeMode.system;
+  // 液态玻璃默认开启；设置页的「低性能模式」打开时会把它置 false。
+  bool _liquidGlass = true;
   bool _ready = false;
   String? _error;
 
@@ -47,7 +51,11 @@ class AppState extends ChangeNotifier {
 
 
 
-  ThemeMode get themeMode => _themeMode;
+  JmThemeMode get themeMode => _themeMode;
+
+  /// 是否开启液态玻璃（默认开；设置页「低性能模式」打开时为 false）。
+  bool get liquidGlass => _liquidGlass;
+
   bool get ready => _ready;
   String? get error => _error;
 
@@ -194,6 +202,7 @@ class AppState extends ChangeNotifier {
 
     if (!_dirty) {
       _themeMode = saved.themeMode;
+      _liquidGlass = saved.liquidGlass;
       _searchHistory
         ..clear()
         ..addAll(saved.searchHistory);
@@ -240,9 +249,19 @@ class AppState extends ChangeNotifier {
     unawaited(_persist());
   }
 
-  void setThemeMode(ThemeMode mode) {
+  void setThemeMode(JmThemeMode mode) {
     if (_themeMode == mode) return;
     _themeMode = mode;
+    _dirty = true;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
+  /// 切换液态玻璃。默认开启；设置页的「低性能模式」打开时会传 false 关掉它。
+  /// 开启后 PrismApp 会用 ultra 档（完整色散 + 磨砂 + 折射）。
+  void setLiquidGlass(bool enabled) {
+    if (_liquidGlass == enabled) return;
+    _liquidGlass = enabled;
     _dirty = true;
     notifyListeners();
     unawaited(_persist());
@@ -284,6 +303,7 @@ class AppState extends ChangeNotifier {
             jwtToken: client.jwtToken,
             avs: client.avs,
             memberInfo: client.memberInfo,
+            liquidGlass: _liquidGlass,
           ),
         );
       } while (_pendingWrite && !_disposed);

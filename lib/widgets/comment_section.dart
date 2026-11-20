@@ -1,14 +1,23 @@
-import 'package:material_ui/material_ui.dart';
+// `TextInputAction` 在 services 层（不是 material），评论框要显式声明回车换行。
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
-import 'common.dart';
+import '../ui/icons/icons.dart';
+import '../ui/section.dart';
+// 只借这个纯函数（1.2万 这样的数字缩写）；三态 / 分组标题都已换成 prism 组件。
+import '../core/format.dart' show compactNumber;
 
 /// 漫画详情页的评论区。
 ///
 /// 数据来自 `forum?mode=manhua&aid=<id>&page=<n>`，返回 `{list, total}`，
 /// 每页 10 条，按时间倒序。
+///
+/// 它是详情页里的一个**普通子节点**（没有自己的 `Scaffold`，也没有自己的滚动
+/// 容器），滚动由外层 `CustomScrollView` 提供 —— 换布局时别把它改成独立可滚组件。
 class CommentSection extends StatefulWidget {
   const CommentSection({
     super.key,
@@ -34,7 +43,7 @@ class _CommentSectionState extends State<CommentSection> {
   bool _loadedOnce = false;
   String? _error;
 
-  /// 发评论弹层是否展开。
+  /// 发评论面板是否展开。
   bool _composerOpen = false;
 
   @override
@@ -43,12 +52,10 @@ class _CommentSectionState extends State<CommentSection> {
     _loadMore();
   }
 
-  /// 打开写评论弹层。未登录直接引导到登录页。
+  /// 打开写评论面板。未登录直接给出登录引导。
   Future<void> _openComposer() async {
     if (!context.read<AppState>().loggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在底栏「登录」页登录')),
-      );
+      BannerHost.maybeOf(context)?.show('请先在底栏「登录」页登录');
       return;
     }
     setState(() => _composerOpen = true);
@@ -103,16 +110,16 @@ class _CommentSectionState extends State<CommentSection> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.colorScheme;
     final imgHost = context.watch<AppState>().imgHost;
     final count = _total > 0 ? _total : widget.totalHint;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        // 写评论面板（默认收起，不占位）。
+        // 写评论面板（默认收起，不占位；展开 / 收起走同一条 AnimatedSize）。
         AnimatedSize(
-          duration: Durations.medium2,
+          duration: commonDuration,
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
           child: _composerOpen
@@ -126,44 +133,17 @@ class _CommentSectionState extends State<CommentSection> {
                 )
               : const SizedBox(width: double.infinity),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-          child: Row(
+        SectionHeader(
+          title: '评论',
+          action: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 8,
             children: <Widget>[
-              Text(
-                '评论',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(width: 8),
-              if (count > 0)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: scheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    compactNumber(count),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: scheme.onSecondaryContainer,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ),
-              const Spacer(),
-              // 写评论入口：做成一眼可点的小按钮，长按区域足够。
+              if (count > 0) MetaChip(label: compactNumber(count)),
               TextButton.icon(
                 onPressed: _openComposer,
-                icon: const Icon(Icons.edit_outlined, size: 18),
+                icon: const GlyphIcon(AppGlyphs.compose, size: 16),
                 label: const Text('写评论'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  minimumSize: const Size(0, 36),
-                ),
               ),
             ],
           ),
@@ -171,28 +151,22 @@ class _CommentSectionState extends State<CommentSection> {
         if (!_loadedOnce && _loading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
-              ),
-            ),
+            child: Center(child: ActivityIndicator(size: 22)),
           )
         else if (_items.isEmpty && _error != null)
+          // 局部失败：在行内给错误与重试，不把整页换成错误态。
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               children: <Widget>[
-                Icon(Icons.error_outline, size: 18, color: scheme.error),
+                GlyphIcon(AppGlyphs.error, size: 18, color: scheme.error),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _error!,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: scheme.error),
+                    style: AppTextStyle.footnote.of(context).copyWith(
+                          color: scheme.error,
+                        ),
                   ),
                 ),
                 TextButton(onPressed: _loadMore, child: const Text('重试')),
@@ -201,45 +175,52 @@ class _CommentSectionState extends State<CommentSection> {
           )
         else if (_items.isEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             child: Text(
               '还没有评论',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+              style: AppTextStyle.footnote.of(context).copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
             ),
           )
         else
-          ..._items.map(
-            (c) => _CommentTile(
-              key: ValueKey<String>(c.id),
-              comment: c,
-              albumId: widget.albumId,
-              imgHost: imgHost,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (var i = 0; i < _items.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: i == _items.length - 1 ? 0 : 8,
+                    ),
+                    child: _CommentTile(
+                      key: ValueKey<String>(_items[i].id),
+                      comment: _items[i],
+                      albumId: widget.albumId,
+                      imgHost: imgHost,
+                    ),
+                  ),
+              ],
             ),
           ),
         if (_items.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
             child: _hasMore
-                ? OutlinedButton(
-                    onPressed: _loading ? null : _loadMore,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(44),
+                ? SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: _loading ? null : _loadMore,
+                      child: _loading
+                          ? const ActivityIndicator(size: 18)
+                          : Text('查看更多评论（${_items.length}/$_total）'),
                     ),
-                    child: _loading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text('查看更多评论（${_items.length}/$_total）'),
                   )
                 : Center(
                     child: Text(
                       '没有更多评论了',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      style: AppTextStyle.caption1.of(context).copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                     ),
@@ -301,7 +282,7 @@ class _CommentComposerState extends State<_CommentComposer> {
     if (text.isEmpty || _sending) return;
 
     setState(() => _sending = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final banners = BannerHost.maybeOf(context);
     try {
       final result = await context.read<AppState>().client.sendComment(
             aid: widget.albumId,
@@ -311,7 +292,10 @@ class _CommentComposerState extends State<_CommentComposer> {
       if (!mounted) return;
       setState(() => _sending = false);
 
-      messenger.showSnackBar(SnackBar(content: Text(result.message)));
+      banners?.show(
+        result.message,
+        level: result.ok ? BannerLevel.success : BannerLevel.error,
+      );
       if (result.ok) {
         // 成功后立刻清空并收起，避免用户再点一次撞上限流。
         _controller.clear();
@@ -320,104 +304,94 @@ class _CommentComposerState extends State<_CommentComposer> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      banners?.show('$e', level: BannerLevel.error);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final scheme = context.colorScheme;
     final length = _controller.text.characters.length;
     final canSend = _controller.text.trim().isNotEmpty && !_sending;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 28, 16, 8),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-        ),
+      child: Card(
+        // 面板本身是一张卡；里面的字段再降一级，靠的是 Card 的 SurfaceScope。
+        inert: true,
+        radius: AppCorner.xl,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            TextField(
-              controller: _controller,
-              focusNode: _focus,
-              minLines: 3,
-              maxLines: 8,
-              maxLength: _maxLength,
-              textInputAction: TextInputAction.newline,
-              enabled: !_sending,
-              // `maxLength` 自带的计数器吃掉不少高度，这里自己画。
-              buildCounter: (
-                context, {
-                required currentLength,
-                required isFocused,
-                required maxLength,
-              }) =>
-                  null,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: _spoiler ? '剧透内容会被折叠，需点击才显示' : '说点什么吧…',
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 4),
+            // 卡片里的评论框用填充式（无描边，只有键盘 / 遥控器把焦点移上来时才描边）。
+            FilledInputTheme(
+              borderRadius: AppRadius.md,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: TextField(
+                controller: _controller,
+                focusNode: _focus,
+                minLines: 3,
+                maxLines: 8,
+                maxLength: _maxLength,
+                textInputAction: TextInputAction.newline,
+                enabled: !_sending,
+                // prism 自带计数器，这里自己画（第一行的 n/200）。
+                buildCounter: (
+                  context, {
+                  required currentLength,
+                  required maxLength,
+                  required isFocused,
+                }) =>
+                    null,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: _spoiler ? '剧透内容会被折叠，需点击才显示' : '说点什么吧…',
+                ),
+                style: AppTextStyle.subheadline.of(context),
               ),
-              style: textTheme.bodyMedium?.copyWith(height: 1.45),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
+            // 第一行：剧透开关 + 自绘的 0/200 计数。
             Row(
               children: <Widget>[
-                // 剧透开关：用 FilterChip 而不是 Switch，点击区域更大、语义更直白。
-                FilterChip(
+                // 剧透开关：用可选择的 chip，点击区域比开关大、语义更直白。
+                Chip(
+                  label: '剧透',
                   selected: _spoiler,
-                  onSelected: _sending
-                      ? null
-                      : (v) => setState(() => _spoiler = v),
-                  avatar: Icon(
-                    Icons.visibility_off_outlined,
-                    size: 16,
-                    color: _spoiler
-                        ? scheme.onSecondaryContainer
-                        : scheme.onSurfaceVariant,
-                  ),
-                  label: const Text('剧透'),
-                  labelStyle: textTheme.labelMedium,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onPressed:
+                      _sending ? null : () => setState(() => _spoiler = !_spoiler),
                 ),
-                const Spacer(),
-                Text(
-                  '$length/$_maxLength',
-                  style: textTheme.labelSmall?.copyWith(
-                    color: length >= _maxLength
-                        ? scheme.error
-                        : scheme.onSurfaceVariant,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '$length/$_maxLength',
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyle.caption2.of(context).copyWith(
+                          color: length >= _maxLength
+                              ? scheme.error
+                              : scheme.onSurfaceVariant,
+                        ),
                   ),
                 ),
-                const SizedBox(width: 8),
+              ],
+            ),
+            // 第二行：取消 / 发表靠右。窄屏下两行各占一行，不会挤成溢出。
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
                 TextButton(
                   onPressed: _sending ? null : widget.onCancel,
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                  ),
                   child: const Text('取消'),
                 ),
                 const SizedBox(width: 4),
                 FilledButton(
                   onPressed: canSend ? _send : null,
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    minimumSize: const Size(0, 36),
-                  ),
                   child: _sending
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const ActivityIndicator(size: 16)
                       : const Text('发表'),
                 ),
               ],
@@ -453,13 +427,16 @@ class _CommentTileState extends State<_CommentTile> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.colorScheme;
     final comment = widget.comment;
     final avatar = comment.avatarUrl(widget.imgHost);
     final hidden = comment.isSpoiler && !_revealed;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+    return Card(
+      // 评论行不可点（点击只发生在剧透提示块上），`inert` 让它保持正常配色。
+      inert: true,
+      radius: AppCorner.xl,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -472,86 +449,59 @@ class _CommentTileState extends State<_CommentTile> {
                 Row(
                   children: <Widget>[
                     Flexible(
+                      flex: 3,
                       child: Text(
                         comment.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: AppTextStyle.footnote.of(
+                          context,
+                          emphasized: true,
+                        ),
                       ),
                     ),
                     if (comment.level > 0) ...<Widget>[
                       const SizedBox(width: 6),
-                      _LevelBadge(level: comment.level),
+                      MetaChip(label: 'Lv${comment.level}'),
                     ],
                     const SizedBox(width: 8),
-                    Text(
-                      comment.addTime,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                    // 窄屏（或超长日期文案）时先省略时间，不让整行溢出。
+                    Flexible(
+                      flex: 2,
+                      child: Text(
+                        comment.addTime,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyle.caption2.of(context).copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 if (hidden)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => setState(() => _revealed = true),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          Icon(
-                            Icons.visibility_off_outlined,
-                            size: 16,
-                            color: scheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '包含剧透，点击查看',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
+                  SizedBox(width: double.infinity, child: _spoilerBlock(context))
                 else
                   Text(
                     comment.content,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(height: 1.45),
+                    style: AppTextStyle.subheadline.of(context),
                   ),
                 if (comment.likes > 0) ...<Widget>[
                   const SizedBox(height: 6),
                   Row(
                     children: <Widget>[
-                      Icon(
-                        Icons.favorite_border,
-                        size: 14,
+                      GlyphIcon(
+                        AppGlyphs.heart,
+                        size: 12,
                         color: scheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${comment.likes}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(color: scheme.onSurfaceVariant),
+                        style: AppTextStyle.caption2.of(context).copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
                       ),
                     ],
                   ),
@@ -565,10 +515,40 @@ class _CommentTileState extends State<_CommentTile> {
             padding: const EdgeInsets.only(top: 3),
             child: Text(
               'JM${widget.albumId}',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 11,
+              style: AppTextStyle.caption2.of(context).copyWith(
                     color: scheme.outline,
-                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 剧透提示块：本身是能「吃」按压的表面，所以不会连带整张卡亮起来。
+  Widget _spoilerBlock(BuildContext context) {
+    final scheme = context.colorScheme;
+    return PressSurface(
+      fill: context.raisedSurfaceLevel.colorOf(scheme),
+      shape: AppShape.md,
+      childFills: true,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      onPressed: () => setState(() => _revealed = true),
+      child: Row(
+        children: <Widget>[
+          GlyphIcon(
+            AppGlyphs.eyeOff,
+            size: 16,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '包含剧透，点击查看',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.footnote.of(context).copyWith(
+                    color: scheme.onSurfaceVariant,
                   ),
             ),
           ),
@@ -588,57 +568,36 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.colorScheme;
 
     final Widget fallback = ColoredBox(
-      color: scheme.surfaceContainerHighest,
-      child: Icon(
-        Icons.person_outline,
-        size: 18,
-        color: scheme.onSurfaceVariant,
+      color: context.raisedSurfaceLevel.colorOf(scheme),
+      child: Center(
+        child: GlyphIcon(
+          AppGlyphs.account,
+          size: 18,
+          color: scheme.onSurfaceVariant,
+        ),
       ),
     );
+
+    // 头像不走页图管线（页图管线带 Referer / 乱序还原，头像不需要），
+    // 也没有 CDN 前缀的那一半 URL 直接当失败处理，测试里不会真联网。
+    final loadable = url.isNotEmpty && url.startsWith('http');
 
     return ClipOval(
       child: SizedBox(
         width: _size,
         height: _size,
-        child: url.isEmpty
-            ? fallback
-            : Image.network(
+        child: loadable
+            ? Image.network(
                 url,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => fallback,
                 loadingBuilder: (context, child, progress) =>
                     progress == null ? child : fallback,
-              ),
-      ),
-    );
-  }
-}
-
-/// 用户等级小徽标。
-class _LevelBadge extends StatelessWidget {
-  const _LevelBadge({required this.level});
-
-  final int level;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        'Lv$level',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: scheme.onPrimaryContainer,
-        ),
+              )
+            : fallback,
       ),
     );
   }

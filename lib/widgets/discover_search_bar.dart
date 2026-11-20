@@ -1,12 +1,26 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/widgets.dart';
+import 'package:prism_ui/prism_ui.dart';
 
-/// 「发现」页顶部搜索栏。
+import '../ui/icons/icons.dart';
+import '../ui/search_field.dart';
+
+/// 「发现」页顶部可伸缩搜索栏（prism 版）。
 ///
-/// 收起态：标题右侧的一枚小搜索框（胶囊）；
-/// 展开态：点击后横向拉长，铺满整条 bar。
+/// 收起态：一枚迷你胶囊（放大镜 + 「搜索」），点一下展开；
+/// 展开态：胶囊横向拉长铺满可用宽度，内容换成 [JmSearchField]（规范里的填充胶囊），
+/// 左侧是返回箭头、右侧是有内容时才出现的清空按钮。
 ///
-/// 动效保持朴素：统一用 [Durations.medium2] + [Curves.easeInOutCubic]，
-/// 展开与收起对称，不做 emphasized 的分段曲线。
+/// 展开 / 收起**完全由父级驱动**（`HomeScreen` 持有 `expanded`），本组件只是受控
+/// 组件；它自己只做两件事：
+///
+/// 1. 展开后让 [JmSearchField] 自动聚焦（`autofocus`），等价于旧实现里
+///    「等宽度动画起步后再 `requestFocus`」，键盘与展开动画不会互相打断；
+/// 2. 输入框失焦（点空白处、系统返回收起键盘）时通知父级收起 —— 靠一层**只观察
+///    不参与遍历**的祖先 [Focus] 读 `hasFocus`（含后代）实现，因为 [JmSearchField]
+///    自己持有 `FocusNode` 且没有对外暴露，这里不去重写一遍输入框。
+///
+/// 什么时候别用：需要用户直接输入的表单字段（登录、订阅链接）用 prism 的
+/// `TextField` + `ListRow`，不要套这个胶囊。
 class DiscoverSearchBar extends StatefulWidget {
   const DiscoverSearchBar({
     super.key,
@@ -14,66 +28,40 @@ class DiscoverSearchBar extends StatefulWidget {
     required this.expanded,
     required this.onExpandedChanged,
     required this.onSubmitted,
-    required this.onOpenWeek,
   });
 
   /// 收起态下搜索框的宽度。
   static const double compactWidth = 148;
+
+  /// 搜索框一行的高度（收起态胶囊与展开态输入框同高，切换时不跳）。
   static const double barHeight = 48;
 
   final TextEditingController controller;
   final bool expanded;
 
-  /// 展开 / 收起请求（点击小搜索框或返回箭头）。
+  /// 展开 / 收起请求（点击收起态胶囊或展开态的返回箭头）。
   final ValueChanged<bool> onExpandedChanged;
 
-  /// 键盘提交搜索。
+  /// 键盘提交搜索；给的是去掉首尾空白的字符串。
   final ValueChanged<String> onSubmitted;
-
-  /// 打开「每周必看」。
-  final VoidCallback onOpenWeek;
 
   @override
   State<DiscoverSearchBar> createState() => _DiscoverSearchBarState();
 }
 
 class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
-  final FocusNode _focus = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focus.addListener(_onFocusChanged);
-  }
-
-  @override
-  void didUpdateWidget(DiscoverSearchBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.expanded && !oldWidget.expanded) {
-      // 等宽度动画起步后再聚焦，键盘弹出与展开动画不会互相打断。
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focus.requestFocus();
-      });
-    } else if (!widget.expanded && oldWidget.expanded) {
-      _focus.unfocus();
-    }
-  }
+  /// 只观察搜索栏子树的焦点：不参与 Tab 遍历、自己也不要焦点。
+  /// `hasFocus` 包含后代，所以 [JmSearchField] 里的输入框一失焦它就会变成 false。
+  final FocusNode _scope = FocusNode(
+    debugLabel: 'discover-search-scope',
+    skipTraversal: true,
+    canRequestFocus: false,
+  );
 
   @override
   void dispose() {
-    _focus
-      ..removeListener(_onFocusChanged)
-      ..dispose();
+    _scope.dispose();
     super.dispose();
-  }
-
-  /// 展开状态下失焦（例如点空白处）即收起，符合 M3 搜索栏行为。
-  void _onFocusChanged() {
-    if (!_focus.hasFocus && widget.expanded && mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_focus.hasFocus) widget.onExpandedChanged(false);
-      });
-    }
   }
 
   void _expand() {
@@ -82,159 +70,143 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
   }
 
   void _collapse() {
-    _focus.unfocus();
+    _scope.unfocus();
     widget.onExpandedChanged(false);
+  }
+
+  /// 提交搜索时会出现一次「程序性失焦」：平台的输入法在 `TextInputAction.search`
+  /// 之后由 `EditableText` 自己 `unfocus` 收键盘（框架默认行为）。那不是用户离开
+  /// 搜索，不能连带把整个搜索面板收起 —— 否则回车搜出来的结果根本来不及看。
+  bool _submitBlur = false;
+
+  /// 失焦即收起（点空白处 / 系统返回收键盘都会走到这里），保留旧手势语义。
+  void _onFocusChanged(bool hasFocus) {
+    if (hasFocus || !widget.expanded || !mounted) return;
+    if (_submitBlur) {
+      _submitBlur = false;
+      return;
+    }
+    // 另起一帧再收起：焦点变化可能发生在 build 途中，不能在同一个回调里改父级状态。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_scope.hasFocus) widget.onExpandedChanged(false);
+    });
   }
 
   void _submit(String value) {
     final keyword = value.trim();
     if (keyword.isEmpty) return;
-    _focus.unfocus();
+    _submitBlur = true;
+    // 下一帧无论如何都要放开这个闸门，避免「提交但没失焦」时把后续真实的失焦吃掉。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _submitBlur = false);
     widget.onSubmitted(keyword);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final expanded = widget.expanded;
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fullWidth = constraints.maxWidth;
-
-        return Stack(
-          alignment: Alignment.centerLeft,
-          children: <Widget>[
-            // 标题行：展开时淡出并轻微上移，同时让出整条 bar。
-            IgnorePointer(
-              ignoring: expanded,
-              child: AnimatedOpacity(
-                opacity: expanded ? 0 : 1,
-                duration: Durations.short4,
-                curve: Curves.easeInOutCubic,
-                child: AnimatedSlide(
-                  offset: expanded ? const Offset(0, -0.08) : Offset.zero,
-                  duration: Durations.short4,
-                  curve: Curves.easeInOutCubic,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 16),
-                    child: Row(
-                      children: <Widget>[
-                        Text(
-                          '发现',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          tooltip: '每周必看',
-                          onPressed: widget.onOpenWeek,
-                          icon: const Icon(Icons.leaderboard_outlined),
-                        ),
-                        const SizedBox(
-                          width: DiscoverSearchBar.compactWidth + 8,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+        // 展开态铺满可用宽度，收起态是一枚固定宽度的迷你胶囊。
+        final width = expanded
+            ? constraints.maxWidth
+            : DiscoverSearchBar.compactWidth;
+        return Focus(
+          focusNode: _scope,
+          skipTraversal: true,
+          canRequestFocus: false,
+          includeSemantics: false,
+          onFocusChange: _onFocusChanged,
+          child: Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: AnimatedContainer(
+              duration: commonDuration,
+              curve: Curves.easeInOutCubic,
+              width: width,
+              height: DiscoverSearchBar.barHeight,
+              alignment: Alignment.center,
+              child: AnimatedSwitcher(
+                duration: midDuration,
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: expanded ? _field(context) : _pill(context),
               ),
             ),
-
-            // 搜索框本体：宽度 + 圆角 + 外边距一起做插值，视觉上就是「拉长铺满」。
-            Align(
-              alignment: Alignment.centerRight,
-              child: AnimatedContainer(
-                duration: Durations.medium2,
-                curve: Curves.easeInOutCubic,
-                width: expanded ? fullWidth : DiscoverSearchBar.compactWidth,
-                height: DiscoverSearchBar.barHeight,
-                margin: EdgeInsets.only(right: expanded ? 0 : 16),
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: expanded
-                      ? scheme.surfaceContainer
-                      : scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(expanded ? 0 : 24),
-                    bottomLeft: Radius.circular(expanded ? 0 : 24),
-                    topRight: Radius.circular(expanded ? 0 : 24),
-                    bottomRight: Radius.circular(expanded ? 0 : 24),
-                  ),
-                ),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: Row(
-                    children: <Widget>[
-                      AnimatedSwitcher(
-                        duration: Durations.short4,
-                        switchInCurve: Curves.easeOut,
-                        switchOutCurve: Curves.easeIn,
-                        transitionBuilder: (child, animation) =>
-                            FadeTransition(opacity: animation, child: child),
-                        child: expanded
-                            ? IconButton(
-                                key: const ValueKey<String>('back'),
-                                tooltip: '关闭搜索',
-                                onPressed: _collapse,
-                                icon: const Icon(Icons.arrow_back),
-                              )
-                            : const SizedBox(
-                                key: ValueKey<String>('search'),
-                                width: 44,
-                                child: Icon(Icons.search, size: 22),
-                              ),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: widget.controller,
-                          focusNode: _focus,
-                          readOnly: !expanded,
-                          showCursor: expanded,
-                          textInputAction: TextInputAction.search,
-                          onTap: _expand,
-                          onSubmitted: _submit,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                            hintText:
-                                expanded ? '搜索漫画 / 作者 / 标签，或输入 JM 号直达…' : '搜索',
-                            hintStyle: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ),
-                      ),
-                      // 有输入时给出清空按钮。
-                      ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: widget.controller,
-                        builder: (context, value, _) {
-                          if (!expanded || value.text.isEmpty) {
-                            return const SizedBox(width: 12);
-                          }
-                          return IconButton(
-                            tooltip: '清空',
-                            onPressed: () {
-                              widget.controller.clear();
-                              _focus.requestFocus();
-                            },
-                            icon: const Icon(Icons.close, size: 20),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         );
       },
     );
   }
+
+  /// 收起态：一枚「看起来像搜索框」的胶囊按钮（不是输入框，点它才展开）。
+  ///
+  /// 液态玻璃开启时胶囊本体走 LiquidGlass（pill 样式），PressSurface 的填充
+  /// 变透明——实底会把 shader 折射的内容完全盖住。
+  Widget _pill(BuildContext context) {
+    final scheme = context.colorScheme;
+    final glass = LiquidGlassScope.of(context);
+    final pill = PressSurface(
+      fill: glass ? const Color(0x00000000) : scheme.surfaceContainerLow,
+      shape: AppShape.full,
+      padding: const EdgeInsets.only(left: 14, right: 12),
+      onPressed: _expand,
+      child: Row(
+        children: <Widget>[
+          GlyphIcon(
+            AppGlyphs.search,
+            size: 20,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '搜索',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.body
+                  .of(context)
+                  .copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!glass) {
+      return SizedBox(
+        key: const ValueKey<String>('collapsed'),
+        height: _fieldHeight,
+        child: pill,
+      );
+    }
+    return SizedBox(
+      key: const ValueKey<String>('collapsed'),
+      height: _fieldHeight,
+      child: LiquidGlass(
+        style: LiquidGlassStyle.pill(scheme),
+        child: pill,
+      ),
+    );
+  }
+
+  /// 展开态：规范里的填充胶囊输入框，左侧返回箭头（关闭搜索）。
+  Widget _field(BuildContext context) {
+    return JmSearchField(
+      key: const ValueKey<String>('expanded'),
+      controller: widget.controller,
+      hint: '搜索漫画 / 作者 / 标签，或输入 JM 号直达…',
+      autofocus: true,
+      leading: Tooltip(
+        message: '关闭搜索',
+        child: PressRegion(
+          onTap: _collapse,
+          child: const Center(
+            child: GlyphIcon(AppGlyphs.arrowBack, size: 20),
+          ),
+        ),
+      ),
+      onSubmitted: _submit,
+    );
+  }
+
+  /// 与 [JmSearchField] 内部高度一致（44），收起 / 展开切换时不留高度差。
+  static const double _fieldHeight = 44;
 }

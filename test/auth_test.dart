@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 
 import 'package:flutterjm/core/gateway_client.dart';
 import 'package:flutterjm/core/settings_store.dart';
+import 'package:flutterjm/core/theme_mode.dart';
 import 'package:flutterjm/state/app_state.dart';
 
 import 'support/fake_gateway.dart';
@@ -200,12 +200,12 @@ void main() {
         settings: SettingsStore(directory: tmp),
       );
       await app.restoreSettings();
-      app.setThemeMode(ThemeMode.dark);
+      app.setThemeMode(JmThemeMode.dark);
       await app.login(username: 'tester', password: 'p@ss');
       await Future<void>.delayed(const Duration(milliseconds: 60));
 
       final saved = await SettingsStore(directory: tmp).read();
-      expect(saved.themeMode, ThemeMode.dark);
+      expect(saved.themeMode, JmThemeMode.dark);
       expect(saved.hasSession, isTrue);
       app.dispose();
     });
