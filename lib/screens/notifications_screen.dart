@@ -147,15 +147,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return JmPage(
       title: '站内通知',
       loading: _refreshing,
-      actions: <Widget>[
-        ElasticPress(
-          child: AppBarActionButton(
-            data: IconButtonData(
-              glyph: AppGlyphs.refresh,
-              tooltip: '刷新',
-              onPressed: _load,
-            ),
-          ),
+      actions: <JmBarAction>[
+        JmBarAction(
+          glyph: AppGlyphs.refresh,
+          tooltip: '刷新',
+          onPressed: _load,
         ),
       ],
       body: _buildBody(),

@@ -172,15 +172,11 @@ class _LibraryScreenState extends State<LibraryScreen>
       title: '书库',
       showBack: false,
       loading: _refreshing,
-      actions: <Widget>[
-        ElasticPress(
-          child: AppBarActionButton(
-            data: IconButtonData(
-              glyph: AppGlyphs.refresh,
-              tooltip: '刷新',
-              onPressed: _reload,
-            ),
-          ),
+      actions: <JmBarAction>[
+        JmBarAction(
+          glyph: AppGlyphs.refresh,
+          tooltip: '刷新',
+          onPressed: _reload,
         ),
       ],
       body: _body(context),

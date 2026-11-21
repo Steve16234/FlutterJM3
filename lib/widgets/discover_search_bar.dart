@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
+import 'package:ios_liquid_glass/ios_liquid_glass.dart' as ilg;
 import 'package:prism_ui/prism_ui.dart';
 
+import '../ui/glass_fallback.dart' show frostFallbackStyle;
 import '../ui/icons/icons.dart';
 import '../ui/search_field.dart';
 
@@ -28,6 +30,7 @@ class DiscoverSearchBar extends StatefulWidget {
     required this.expanded,
     required this.onExpandedChanged,
     required this.onSubmitted,
+    this.fillWidth = false,
   });
 
   /// 收起态下搜索框的宽度。
@@ -38,6 +41,10 @@ class DiscoverSearchBar extends StatefulWidget {
 
   final TextEditingController controller;
   final bool expanded;
+
+  /// true 时收起态也铺满父级给的约束宽度（首页顶部 6/9 那种独立胶囊行）。
+  /// false 时收起态是固定宽度的迷你胶囊（旧行为）。
+  final bool fillWidth;
 
   /// 展开 / 收起请求（点击收起态胶囊或展开态的返回箭头）。
   final ValueChanged<bool> onExpandedChanged;
@@ -106,8 +113,9 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
     final expanded = widget.expanded;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 展开态铺满可用宽度，收起态是一枚固定宽度的迷你胶囊。
-        final width = expanded
+        // 展开态铺满可用宽度；收起态默认固定宽度的迷你胶囊，
+        // fillWidth 为 true 时（首页顶部独立行）也铺满父级给的约束宽度。
+        final width = (expanded || widget.fillWidth)
             ? constraints.maxWidth
             : DiscoverSearchBar.compactWidth;
         return Focus(
@@ -139,13 +147,15 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
 
   /// 收起态：一枚「看起来像搜索框」的胶囊按钮（不是输入框，点它才展开）。
   ///
-  /// 液态玻璃开启时胶囊本体走 LiquidGlass（pill 样式），PressSurface 的填充
-  /// 变透明——实底会把 shader 折射的内容完全盖住。
+  /// 液态玻璃开启时胶囊本体走 prism 的 LiquidGlass（pill 样式），PressSurface
+  /// 的填充变透明——实底会把 shader 折射的内容完全盖住。
+  /// 关闭时和顶栏圆钮一致，走 ios_liquid_glass 的磨砂 fallback（BackdropFilter），
+  /// 而不是实底填充，否则关玻璃后搜索框光秃秃、另外两个钮却有磨砂。
   Widget _pill(BuildContext context) {
     final scheme = context.colorScheme;
     final glass = LiquidGlassScope.of(context);
     final pill = PressSurface(
-      fill: glass ? const Color(0x00000000) : scheme.surfaceContainerLow,
+      fill: const Color(0x00000000),
       shape: AppShape.full,
       padding: const EdgeInsets.only(left: 14, right: 12),
       onPressed: _expand,
@@ -170,20 +180,22 @@ class _DiscoverSearchBarState extends State<DiscoverSearchBar> {
         ],
       ),
     );
-    if (!glass) {
-      return SizedBox(
-        key: const ValueKey<String>('collapsed'),
-        height: _fieldHeight,
-        child: pill,
-      );
-    }
-    return SizedBox(
+    final box = SizedBox(
       key: const ValueKey<String>('collapsed'),
       height: _fieldHeight,
-      child: LiquidGlass(
+      child: pill,
+    );
+    if (glass) {
+      return LiquidGlass(
         style: LiquidGlassStyle.pill(scheme),
-        child: pill,
-      ),
+        child: box,
+      );
+    }
+    // 关闭液态玻璃：磨砂 fallback，和顶栏另外两个圆钮同一套观感。
+    return ilg.AdaptiveGlassSurface(
+      borderRadius: _fieldHeight / 2,
+      style: frostFallbackStyle,
+      child: box,
     );
   }
 

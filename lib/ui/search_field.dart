@@ -1,7 +1,9 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:ios_liquid_glass/ios_liquid_glass.dart' as ilg;
 import 'package:prism_ui/prism_ui.dart';
 
+import 'glass_fallback.dart' show frostFallbackStyle;
 import 'icons/icons.dart';
 
 /// 填充胶囊搜索框（prism 规范里的搜索框形态）。
@@ -112,13 +114,12 @@ class _JmSearchFieldState extends State<JmSearchField> {
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
     final pill = AppShape.input.copyWith(borderRadius: AppRadius.full);
-    // 液态玻璃开启时：胶囊本体交给 LiquidGlass（shader 折射背后的内容），
+    // 液态玻璃开启时：胶囊本体交给 prism 的 LiquidGlass（shader 折射背后的内容），
     // TextField 的填充改透明——再画一层实底会把玻璃完全盖住。
-    // 关闭时维持原样：「当前表面的下一级」实底填充。
+    // 关闭时：和顶栏圆钮 / 首页胶囊一致走 ios_liquid_glass 的磨砂 fallback，
+    // 而不是实底填充，否则关玻璃后输入框没有磨砂、其余按钮却有。
     final glass = LiquidGlassScope.of(context);
-    final fill = glass
-        ? const Color(0x00000000)
-        : context.raisedSurfaceLevel.colorOf(scheme);
+    final fill = const Color(0x00000000);
     final field = ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[_focus, FocusMovedByKey.instance]),
       builder: (context, _) {
@@ -165,9 +166,16 @@ class _JmSearchFieldState extends State<JmSearchField> {
         );
       },
     );
-    if (!glass) return field;
-    return LiquidGlass(
-      style: LiquidGlassStyle.pill(scheme),
+    if (glass) {
+      return LiquidGlass(
+        style: LiquidGlassStyle.pill(scheme),
+        child: field,
+      );
+    }
+    // 关闭液态玻璃：磨砂 fallback，和顶栏圆钮同一套观感。
+    return ilg.AdaptiveGlassSurface(
+      borderRadius: _height / 2,
+      style: frostFallbackStyle,
       child: field,
     );
   }

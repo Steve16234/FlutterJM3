@@ -11,6 +11,7 @@ import '../state/app_state.dart';
 import '../theme/prism_theme.dart';
 import '../ui/icons/icons.dart';
 import '../ui/states.dart';
+import '../ui/top_bar.dart' show GlassIconButton;
 
 /// 阅读器：纵向滚动，逐页展示（带三层缓存的）乱序还原图。
 ///
@@ -250,8 +251,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
 /// 顶部浮动 bar：返回 + 章节标题。
 ///
-/// 浮层用 `SurfaceLevel.floatingOf`（亮色 card / 暗色 block），内容通过
-/// `SurfaceScope` 下传同一层级，让里面的组件自己再降一级。
+/// 液态玻璃开启时用玻璃条（顶边贴屏、只圆下角），关闭时退回原来的实底
+/// `Surface`；返回按钮统一用 [GlassIconButton]，和其它页面顶栏一致。
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.title, required this.onBack});
 
@@ -260,36 +261,73 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.colorScheme;
-    final level = SurfaceLevel.floatingOf(scheme);
-    return Surface(
-      color: level.colorOf(scheme),
-      shape: AppShape.vertical(bottom: AppCorner.xl),
-      elevation: _floatingElevation,
-      child: SurfaceScope(
-        level: level,
-        child: SafeArea(
-          bottom: false,
-          child: SizedBox(
-            height: _barHeight,
+    return _ReaderBarSurface(
+      roundTop: false,
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: _barHeight,
+          child: Row(
+            children: <Widget>[
+              const SizedBox(width: 4),
+              GlassIconButton(
+                glyph: AppGlyphs.arrowBack,
+                tooltip: '返回',
+                onPressed: onBack,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyle.headline.of(context),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 底部浮动 bar：页码 + 进度。玻璃 / 实底切换与顶部 bar 一致。
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({required this.currentPage, required this.total});
+
+  final int currentPage;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total == 0 ? 0.0 : currentPage / total;
+
+    return _ReaderBarSurface(
+      roundTop: true,
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: _barHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: <Widget>[
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: '返回',
-                  onPressed: onBack,
-                  icon: const GlyphIcon(AppGlyphs.arrowBack),
+                Text(
+                  '$currentPage / $total',
+                  style: AppTextStyle.footnote.of(context).toTabular,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyle.headline.of(context),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: progress),
+                    duration: _progressDuration,
+                    curve: Curves.easeOut,
+                    builder: (context, value, _) =>
+                        LinearProgressIndicator(value: value),
                   ),
                 ),
-                const SizedBox(width: 8),
               ],
             ),
           ),
@@ -299,55 +337,89 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// 底部浮动 bar：页码 + 进度。
-class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.currentPage, required this.total});
+/// 阅读器上下浮动条的承载面：液态玻璃开启时用一根只圆向内容那一侧的玻璃条，
+/// 关闭时维持原来的实底 `Surface`（低性能模式）。柱子贴屏幕边缘，玻璃不画硬边。
+class _ReaderBarSurface extends StatelessWidget {
+  const _ReaderBarSurface({
+    required this.roundTop,
+    required this.child,
+  });
 
-  final int currentPage;
-  final int total;
+  /// true = 底部条（圆上角）；false = 顶部条（圆下角）。
+  final bool roundTop;
+  final Widget child;
+
+  static const double _radius = 28;
 
   @override
   Widget build(BuildContext context) {
+    if (LiquidGlassScope.of(context)) {
+      final scheme = context.colorScheme;
+      // 和 prism 的 glass header 同一档：弱透镜 + 轻微雾化，整条不放大内容。
+      final style = LiquidGlassStyle.pill(scheme).copyWith(
+        blur: 0,
+        hazeBlur: 12,
+      );
+      return LiquidGlass(
+        style: style,
+        clipper: _ReaderBarClipper(roundTop: roundTop, radius: _radius),
+        child: child,
+      );
+    }
     final scheme = context.colorScheme;
     final level = SurfaceLevel.floatingOf(scheme);
-    final progress = total == 0 ? 0.0 : currentPage / total;
-
     return Surface(
       color: level.colorOf(scheme),
-      shape: AppShape.vertical(top: AppCorner.xl),
+      shape: roundTop
+          ? AppShape.vertical(top: AppCorner.xl)
+          : AppShape.vertical(bottom: AppCorner.xl),
       elevation: _floatingElevation,
-      child: SurfaceScope(
-        level: level,
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: _barHeight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: <Widget>[
-                  Text(
-                    '$currentPage / $total',
-                    style: AppTextStyle.footnote.of(context).toTabular,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 0, end: progress),
-                      duration: _progressDuration,
-                      curve: Curves.easeOut,
-                      builder: (context, value, _) =>
-                          LinearProgressIndicator(value: value),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: SurfaceScope(level: level, child: child),
     );
   }
+}
+
+/// 顶部条圆下角、底部条圆上角，另一边贴屏幕边缘保持笔直。
+class _ReaderBarClipper extends CustomClipper<Path> {
+  const _ReaderBarClipper({required this.roundTop, required this.radius});
+
+  final bool roundTop;
+  final double radius;
+
+  @override
+  Path getClip(Size size) {
+    final r = radius;
+    final path = Path();
+    if (roundTop) {
+      path
+        ..moveTo(0, size.height)
+        ..lineTo(0, r)
+        ..quadraticBezierTo(0, 0, r, 0)
+        ..lineTo(size.width - r, 0)
+        ..quadraticBezierTo(size.width, 0, size.width, r)
+        ..lineTo(size.width, size.height)
+        ..close();
+    } else {
+      path
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width, size.height - r)
+        ..quadraticBezierTo(
+          size.width,
+          size.height,
+          size.width - r,
+          size.height,
+        )
+        ..lineTo(r, size.height)
+        ..quadraticBezierTo(0, size.height, 0, size.height - r)
+        ..close();
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(_ReaderBarClipper oldDelegate) =>
+      oldDelegate.roundTop != roundTop || oldDelegate.radius != radius;
 }
 
 /// 单页图片：命中缓存立刻显示，未命中才下载。

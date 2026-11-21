@@ -73,6 +73,9 @@ class _StartScreenState extends State<StartScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          // Column 不像 ListView 那样会自动消费顶栏的 MediaQuery.padding.top，
+          // 必须显式让开浮动顶栏，否则「选择线路」会贴到状态栏上被遮挡。
+          SizedBox(height: context.appBarInset),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
             child: Column(

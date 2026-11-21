@@ -12,6 +12,7 @@ import '../ui/icons/icons.dart';
 import '../ui/page.dart';
 import '../ui/section.dart';
 import '../ui/states.dart';
+import '../ui/top_bar.dart' show GlassIconButton;
 // 只借这个纯函数（1.2万 这样的数字缩写）；封面 / 三态 / 分组标题都已换成 prism 组件。
 import '../core/format.dart' show compactNumber;
 import '../widgets/comment_section.dart';
@@ -461,36 +462,33 @@ class _WatchButton extends StatelessWidget {
   }
 }
 
-/// 折叠头的 bar：返回 / 收藏 / 关注。
+/// 折叠头的玻璃圆钮：返回 / 收藏 / 关注。
 ///
-/// 压在封面上时是一颗 scrim 底色的圆按钮（封面深浅未知，靠底色保证可读），
-/// 随着折叠进度过渡成页面上的普通图标按钮。
+/// 和其余页面顶栏共用 [GlassIconButton]（液态开=折射透镜，关=磨砂 fallback），
+/// 压在封面上或收成 bar 都是同一套玻璃观感；收藏 / 关注选中态用 iconColor 高亮。
 class _BarAction extends StatelessWidget {
   const _BarAction({
     required this.glyph,
     required this.tooltip,
     required this.onPressed,
-    required this.ink,
-    required this.fill,
+    this.iconColor,
   });
 
   final Glyph glyph;
   final String tooltip;
   final VoidCallback onPressed;
-  final Color ink;
-  final Color fill;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
-    return ElasticPress(
-      child: IconButton(
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: GlassIconButton(
+        glyph: glyph,
         tooltip: tooltip,
         onPressed: onPressed,
-        icon: GlyphIcon(glyph),
-        style: ButtonStyle.from(
-          foregroundColor: ink,
-          backgroundColor: fill,
-        ),
+        iconColor: iconColor,
       ),
     );
   }
@@ -562,10 +560,6 @@ class _CoverHeader extends SliverPersistentHeaderDelegate {
     final range = maxExtent - minExtent;
     // 0 = 封面完全展开；1 = 已经收成一条 bar。
     final collapse = range <= 0 ? 1.0 : (shrinkOffset / range).clamp(0.0, 1.0);
-    // 压在封面上的图标：底色是 scrim，前景用 onPrimary（本应用 vivid 配色下
-    // 明暗两套都是浅色），收起来以后换回页面上的 onSurface。
-    final fill = scheme.scrim.withValues(alpha: 0.32 * (1 - collapse));
-    final ink = Color.lerp(scheme.onPrimary, scheme.onSurface, collapse)!;
 
     return ClipRect(
       child: Stack(
@@ -618,24 +612,20 @@ class _CoverHeader extends SliverPersistentHeaderDelegate {
                       glyph: AppGlyphs.arrowBack,
                       tooltip: '返回',
                       onPressed: onBack,
-                      ink: ink,
-                      fill: fill,
                     ),
                   const Spacer(),
                   _BarAction(
                     glyph: AppGlyphs.heart,
                     tooltip: favorited ? '已收藏' : '收藏',
                     onPressed: onFavorite,
-                    ink: favorited ? scheme.primary : ink,
-                    fill: fill,
+                    iconColor: favorited ? scheme.primary : null,
                   ),
                   const SizedBox(width: 4),
                   _BarAction(
                     glyph: AppGlyphs.bookmarks,
                     tooltip: tracked ? '已关注' : '关注',
                     onPressed: onTrack,
-                    ink: tracked ? scheme.primary : ink,
-                    fill: fill,
+                    iconColor: tracked ? scheme.primary : null,
                   ),
                 ],
               ),

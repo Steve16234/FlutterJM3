@@ -45,9 +45,9 @@ class _WeekScreenState extends State<WeekScreen> {
   }
 
   void _openIssue(WeekIssue issue) {
-    Navigator.of(context).push(
-      CardPageRoute<void>(builder: (_) => _WeekDetailScreen(issue: issue)),
-    );
+    // 和首页进入「每周必看」走同一套 BaseNavigator：它会按设备形态选
+    // 卡片推入 / 淡入过渡，避免两个入口动画不一致。
+    BaseNavigator.push<void>(context, _WeekDetailScreen(issue: issue));
   }
 
   @override
@@ -73,7 +73,14 @@ class _WeekScreenState extends State<WeekScreen> {
           }
 
           return ListView(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 24 + context.bottomInset),
+            // 顶部留白放在滚动内容内部：首屏不被标题盖住；滑动时列表仍从
+            // 顶栏背后穿过，液态玻璃才有身后内容可折射，不会形成硬边。
+            padding: EdgeInsets.fromLTRB(
+              16,
+              context.appBarInset + 4,
+              16,
+              24 + context.bottomInset,
+            ),
             children: <Widget>[
               // 一期一行、行间发丝线由 `SectionCard` 统一画（不用 Divider 手写）。
               SectionCard(
@@ -154,7 +161,7 @@ class _WeekDetailScreenState extends State<_WeekDetailScreen> {
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   16,
-                  4,
+                  context.appBarInset + 4,
                   16,
                   24 + context.bottomInset,
                 ),

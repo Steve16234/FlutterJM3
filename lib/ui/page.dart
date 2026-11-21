@@ -3,6 +3,9 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
 import 'icons/icons.dart';
+import 'top_bar.dart';
+
+export 'top_bar.dart' show JmBarAction;
 
 /// 每个页面的统一骨架：一条 bar + 一块 body。
 ///
@@ -18,13 +21,11 @@ import 'icons/icons.dart';
 ///   Widget build(BuildContext context) {
 ///     return JmPage(
 ///       title: '设置',
-///       actions: <Widget>[
-///         AppBarActionButton(
-///           data: IconButtonData(
-///             glyph: AppGlyphs.refresh,
-///             tooltip: '刷新',
-///             onPressed: () => reload(),
-///           ),
+///       actions: <JmBarAction>[
+///         JmBarAction(
+///           glyph: AppGlyphs.refresh,
+///           tooltip: '刷新',
+///           onPressed: () => reload(),
 ///         ),
 ///       ],
 ///       body: ListView(
@@ -48,7 +49,8 @@ class JmPage extends StatelessWidget {
     super.key,
     this.title,
     this.showBack = true,
-    this.actions = const <Widget>[],
+    this.showBar = true,
+    this.actions = const <JmBarAction>[],
     this.bottom,
     this.body,
     this.backgroundColor,
@@ -64,9 +66,13 @@ class JmPage extends StatelessWidget {
   /// 所以根页面传 `true` 也不会多出一个按了没反应的箭头。
   final bool showBack;
 
-  /// bar 右侧的动作。约定 2~3 个，用 `AppBarActionButton` +
-  /// `IconButtonData(glyph: …)` 构造，这样以后换溢出菜单不用改页面。
-  final List<Widget> actions;
+  /// 是否显示默认顶栏。首页把搜索 / 刷新 / 日历做成自己那一行玻璃控件时传 false，
+  /// 只留一条 0 高度的占位 bar 给 [PrismScaffold] 拿页面底色 / 键盘让位。
+  final bool showBar;
+
+  /// bar 右侧的动作。页面只描述 glyph / 提示 / 回调，由 [JmTopBar]
+  /// 统一包成 [LiquidGlassIconButton]（iOS 26 原生玻璃，其他平台磨砂回落）。
+  final List<JmBarAction> actions;
 
   /// 贴在 bar 正下方、body 之上的整条内容（搜索框、tab 条、关键词条）。
   /// 给了它之后 body 不再钻到这条内容下面，但仍从 bar 下面开始。
@@ -101,37 +107,49 @@ class JmPage extends StatelessWidget {
     final canPop =
         showBack && (Navigator.maybeOf(context)?.canPop() ?? false);
     return PrismScaffold(
-      bar: ScaffoldBar(
-        // 只有 sheet 里才是紧凑 bar；页面永远是 72dp 的常规 bar。
-        isCompact: context.isInCompactSheet,
-        // 标题/动作都是本 widget 的字段，随 JmPage 重建即可，不需要额外监听。
-        listenable: Listenable.merge(const <Listenable>[]),
-        loading: loading ?? _idle,
-        builder: (context) => AppBar(
-          leading: canPop
-              ? ElasticPress(
-                  child: AppBarActionButton(
-                    data: IconButtonData(
-                      glyph: Glyphs.arrowBack,
-                      tooltip: _backLabel(context),
-                      onPressed: () => Navigator.maybePop(context),
-                    ),
+      bar: showBar
+          ? (context.isInCompactSheet
+              ? ScaffoldBar(
+                  isCompact: true,
+                  listenable: Listenable.merge(const <Listenable>[]),
+                  loading: loading ?? _idle,
+                  builder: (context) => AppBar(
+                    leading: canPop
+                        ? ElasticPress(
+                            child: AppBarActionButton(
+                              data: IconButtonData(
+                                glyph: Glyphs.arrowBack,
+                                tooltip: _backLabel(context),
+                                onPressed: () => Navigator.maybePop(context),
+                              ),
+                            ),
+                          )
+                        : null,
+                    title: title == null ? null : Text(title),
+                    // sheet 里保持 prism 原生动作按钮（sheet bar 有自己的紧凑规范）。
+                    actions: <Widget>[
+                      for (final action in actions)
+                        AppBarActionButton(
+                          data: IconButtonData(
+                            glyph: action.glyph,
+                            tooltip: action.tooltip,
+                            onPressed: action.onPressed,
+                          ),
+                        ),
+                    ],
                   ),
                 )
-              : null,
-          title: title == null ? null : Text(title),
-          actions: <Widget>[
-            ...actions,
-            // 右侧留出与 bar 左边距一致的呼吸位，页面不用自己补。
-            if (actions.isNotEmpty) const SizedBox(width: appBarActionSpace),
-          ],
-        ),
-      ),
+              : JmTopBar(
+                  title: title,
+                  showBack: canPop,
+                  actions: actions,
+                  loading: loading ?? _idle,
+                  onBack: () => Navigator.maybePop(context),
+                  backLabel: _backLabel(context),
+                ))
+          : const _EmptyBar(),
       headerBuilder: bottom == null ? null : (_) => bottom,
-      body: _BodyInset(
-        hasHeader: bottom != null,
-        child: body ?? const SizedBox.shrink(),
-      ),
+      body: _BodyInset(child: body ?? const SizedBox.shrink()),
       foot: foot,
       backgroundColor: backgroundColor,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
@@ -144,35 +162,32 @@ class JmPage extends StatelessWidget {
       Localizations.of<UiLocalizations>(context, UiLocalizations)?.back ?? '返回';
 }
 
-/// 把 bar 占掉的高度真正让出来。
+/// 不垫物理 Padding，让 body 从屏幕顶端铺满。
 ///
-/// `PrismScaffold` 的 bar 是**浮在 body 之上**的，它只把「bar 有多高」写进 body 的
-/// `MediaQuery.padding.top`，指望 body 自己消费。问题是只有「不给 padding 的
-/// 可滚动组件」才会自动消费它——`ListView(padding: …)` / `CustomScrollView` 里的
-/// `SliverPadding` / 裸 `Column` 都会把这段忽略掉，于是首屏内容被压在 bar 底下。
-///
-/// 这里改成显式让位：先按当前 MediaQuery 的 top padding 垫一层，再把这段从
-/// MediaQuery 里去掉，保证里面再怎么建滚动容器都不会重复计一次。
-/// 有 [JmPage.bottom]（条状内容）时 prism 已经把这段去掉了，这里拿到的是 0，不会叠加。
+/// `PrismScaffold` 会把 bar 高度写进 body 的 `MediaQuery.padding.top`：
+/// - 首屏：`ListView(padding: …)` / `CustomScrollView` 会消费它，内容从
+///   bar 下方开始，不被遮住；
+/// - 滚动：内容从 bar **背后**滑过，配合顶栏的溶解渐变就没有硬切线。
+///   液态玻璃需要身后有内容滚过才会实时折射，所以这里绝不能垫物理 padding。
 class _BodyInset extends StatelessWidget {
-  const _BodyInset({required this.hasHeader, required this.child});
+  const _BodyInset({required this.child});
 
-  final bool hasHeader;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final inset = MediaQuery.paddingOf(context).top;
-    if (hasHeader || inset <= 0) {
-      return child;
-    }
-    return Padding(
-      padding: EdgeInsets.only(top: inset),
-      child: MediaQuery.removePadding(
-        context: context,
-        removeTop: true,
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => child;
+}
+
+/// 0 高度的占位 bar：[JmPage.showBar] 为 false 时用它替掉真正顶栏。
+///
+/// [PrismScaffold] 需要一条 bar 来铺设页面底色、键盘让位与 body 的
+/// MediaQuery；给一条 0 高度占位就能既去掉可见顶栏，又保留这些语义。
+class _EmptyBar extends StatelessWidget implements PreferredSizeWidget {
+  const _EmptyBar();
+
+  @override
+  Size get preferredSize => Size.zero;
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

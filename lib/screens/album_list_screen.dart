@@ -166,15 +166,11 @@ class _PagedAlbumScreenState extends State<PagedAlbumScreen> {
       // 原来的两行标题（分类 / 子分类）在 prism 里分成「bar 标题 + 条状副标题」。
       bottom: subtitle == null ? null : _SubtitleBar(text: subtitle),
       loading: _refreshingProgress,
-      actions: <Widget>[
-        ElasticPress(
-          child: AppBarActionButton(
-            data: IconButtonData(
-              glyph: AppGlyphs.refresh,
-              tooltip: '刷新',
-              onPressed: _refresh,
-            ),
-          ),
+      actions: <JmBarAction>[
+        JmBarAction(
+          glyph: AppGlyphs.refresh,
+          tooltip: '刷新',
+          onPressed: _refresh,
         ),
       ],
       body: _body(context, imgHost),

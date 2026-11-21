@@ -125,15 +125,11 @@ class _AccountAlbumsScreenState extends State<AccountAlbumsScreen> {
     return JmPage(
       title: widget.title,
       loading: _refreshing,
-      actions: <Widget>[
-        ElasticPress(
-          child: AppBarActionButton(
-            data: IconButtonData(
-              glyph: AppGlyphs.refresh,
-              tooltip: '刷新',
-              onPressed: () => _load(refresh: true),
-            ),
-          ),
+      actions: <JmBarAction>[
+        JmBarAction(
+          glyph: AppGlyphs.refresh,
+          tooltip: '刷新',
+          onPressed: () => _load(refresh: true),
         ),
       ],
       body: _buildBody(imgHost),
