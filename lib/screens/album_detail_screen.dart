@@ -8,11 +8,11 @@ import 'package:provider/provider.dart';
 import '../core/image_loader.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
+import '../ui/glass_capsule.dart';
 import '../ui/icons/icons.dart';
 import '../ui/page.dart';
 import '../ui/section.dart';
 import '../ui/states.dart';
-import '../ui/top_bar.dart' show GlassIconButton;
 // 只借这个纯函数（1.2万 这样的数字缩写）；封面 / 三态 / 分组标题都已换成 prism 组件。
 import '../core/format.dart' show compactNumber;
 import '../widgets/comment_section.dart';
@@ -462,10 +462,31 @@ class _WatchButton extends StatelessWidget {
   }
 }
 
-/// 折叠头的玻璃圆钮：返回 / 收藏 / 关注。
+/// 详情页顶部的悬浮胶囊：把 1~2 个玻璃圆钮包进一枚胶囊里。
 ///
-/// 和其余页面顶栏共用 [GlassIconButton]（液态开=折射透镜，关=磨砂 fallback），
-/// 压在封面上或收成 bar 都是同一套玻璃观感；收藏 / 关注选中态用 iconColor 高亮。
+/// 压在封面上时是玻璃胶囊（背后有封面可折射），收起后是同形状的浮动胶囊，
+/// 而不是铺满整条屏幕的玻璃板。
+class _ActionCapsule extends StatelessWidget {
+  const _ActionCapsule({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCapsule(
+      height: 56,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[child]),
+      ),
+    );
+  }
+}
+
+/// 折叠头里的图标按钮（返回 / 收藏 / 关注）。
+///
+/// 玻璃面由外面的 [_ActionCapsule] 提供，这里只画图标和点击区，
+/// 否则会出现「胶囊套圆钮」的双层玻璃，看着发脏。
 class _BarAction extends StatelessWidget {
   const _BarAction({
     required this.glyph,
@@ -481,14 +502,15 @@ class _BarAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
     return SizedBox(
       width: 44,
       height: 44,
-      child: GlassIconButton(
-        glyph: glyph,
+      child: IconButton(
         tooltip: tooltip,
         onPressed: onPressed,
-        iconColor: iconColor,
+        padding: EdgeInsets.zero,
+        icon: GlyphIcon(glyph, color: iconColor ?? scheme.onSurface),
       ),
     );
   }
@@ -604,28 +626,37 @@ class _CoverHeader extends SliverPersistentHeaderDelegate {
             right: 0,
             height: minExtent,
             child: Padding(
-              padding: EdgeInsets.only(top: topInset, left: 8, right: 8),
+              padding: EdgeInsets.only(top: topInset + 8, left: 16, right: 16),
               child: Row(
                 children: <Widget>[
                   if (canPop)
-                    _BarAction(
-                      glyph: AppGlyphs.arrowBack,
-                      tooltip: '返回',
-                      onPressed: onBack,
+                    _ActionCapsule(
+                      child: _BarAction(
+                        glyph: AppGlyphs.arrowBack,
+                        tooltip: '返回',
+                        onPressed: onBack,
+                      ),
                     ),
                   const Spacer(),
-                  _BarAction(
-                    glyph: AppGlyphs.heart,
-                    tooltip: favorited ? '已收藏' : '收藏',
-                    onPressed: onFavorite,
-                    iconColor: favorited ? scheme.primary : null,
-                  ),
-                  const SizedBox(width: 4),
-                  _BarAction(
-                    glyph: AppGlyphs.bookmarks,
-                    tooltip: tracked ? '已关注' : '关注',
-                    onPressed: onTrack,
-                    iconColor: tracked ? scheme.primary : null,
+                  // 收藏 / 关注合成一枚悬浮胶囊，而不是铺满整条的玻璃板。
+                  _ActionCapsule(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        _BarAction(
+                          glyph: AppGlyphs.heart,
+                          tooltip: favorited ? '已收藏' : '收藏',
+                          onPressed: onFavorite,
+                          iconColor: favorited ? scheme.primary : null,
+                        ),
+                        _BarAction(
+                          glyph: AppGlyphs.bookmarks,
+                          tooltip: tracked ? '已关注' : '关注',
+                          onPressed: onTrack,
+                          iconColor: tracked ? scheme.primary : null,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
